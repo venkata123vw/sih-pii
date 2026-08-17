@@ -7,18 +7,9 @@ def apply_redactions(filepath: str, decisions: dict, out_path: str) -> str:
 
     decisions should contain a list of detections.
     Each detection must have:
-        page_num
-        bbox = [x0, y0, x1, y1]
-
-    Example:
-        {
-            "detections": [
-                {
-                    "page_num": 0,
-                    "bbox": [100, 180, 300, 205]
-                }
-            ]
-        }
+        page_index
+        bbox = [x1, y1, x2, y2]
+        text
     """
 
     doc = pymupdf.open(filepath)
@@ -26,11 +17,22 @@ def apply_redactions(filepath: str, decisions: dict, out_path: str) -> str:
     detections = decisions.get("detections", [])
 
     for detection in detections:
-
-        page_num = detection["page_num"]
+        page_index = detection["page_index"]
         x0, y0, x1, y1 = detection["bbox"]
 
-        page = doc[page_num]
+        # Validate page index
+        if page_index < 0 or page_index >= len(doc):
+            raise ValueError(
+                f"Invalid page_index: {page_index}"
+            )
+
+        # Validate bounding box
+        if x1 <= x0 or y1 <= y0:
+            raise ValueError(
+                f"Invalid bbox: {detection['bbox']}"
+            )
+
+        page = doc[page_index]
 
         rect = pymupdf.Rect(
             x0,
