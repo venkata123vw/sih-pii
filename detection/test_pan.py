@@ -1,32 +1,38 @@
-from pan import validate_pan, pan_entity_type, mask_pan
+from detection.pan import validate_pan, pan_signals, pan_entity_type, mask_pan
 
-# ITD's own published example
+# ITD published example
 assert validate_pan('ALWPG5809L') is True
 assert pan_entity_type('ALWPG5809L') == 'Individual'
 
-# Valid entity codes
-assert validate_pan('ABCCD1234E') is True      # C = Company
-assert validate_pan('ABCFD1234E') is True      # F = Firm/LLP
-assert validate_pan('ABCTD1234E') is True      # T = Trust
-assert validate_pan('ABCHD1234E') is True      # H = HUF
+# Valid, well-known entity codes
+for p in ['ABCCD1234E', 'ABCFD1234E', 'ABCTD1234E', 'ABCHD1234E']:
+    assert validate_pan(p) is True
+    assert pan_signals(p)['known_entity_code'] is True
 
-# Invalid entity codes — these are the common wrong ones
-assert validate_pan('ABCED1234E') is False     # E is NOT valid (LLP uses F)
-assert validate_pan('ABCKD1234E') is False     # K is NOT valid (Trust uses T)
-assert validate_pan('ABCXD1234E') is False     # X not an entity code
+# CHANGED: contested/unknown entity codes now DETECTED, flagged low-signal
+for p in ['ABCED1234E', 'ABCKD1234E', 'ABCXD1234E']:
+    assert validate_pan(p) is True, p
+    assert pan_signals(p)['known_entity_code'] is False, p
 
-# Format failures
-assert validate_pan('ABC1D1234E') is False     # digit in letter zone
-assert validate_pan('ABCPD12345') is False     # digit in final position
-assert validate_pan('ABCPD123E') is False      # too short
-assert validate_pan('ABCPD00001') is False     # wait - check this one
+# CHANGED: 0000 serial detected, flagged
+assert validate_pan('ABCPD0000E') is True
+assert pan_signals('ABCPD0000E')['serial_nonzero'] is False
+assert pan_signals('ALWPG5809L')['serial_nonzero'] is True
 
-# Serial check
-assert validate_pan('ABCPD0000E') is False     # serial 0000 invalid
+# Format failures stay failures
+for p in ['ABC1D1234E', 'ABCPD12345', 'ABCPD123E', 'ABCPD1234EX', '']:
+    assert validate_pan(p) is False, p
+    assert pan_signals(p)['format_ok'] is False, p
 
 # Case tolerance
 assert validate_pan('alwpg5809l') is True
 
+# Masking
 assert mask_pan('ALWPG5809L') == 'XXXXXX809L'
-
+assert mask_pan('ALWPG5809L', reveal_last=0) == 'XXXXXXXXXX'
+for bad in (5, 10, -1):
+    try:
+        mask_pan('ALWPG5809L', reveal_last=bad); raise AssertionError('no raise')
+    except ValueError:
+        pass
 print('All PAN tests passed')

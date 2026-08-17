@@ -1,4 +1,4 @@
-from redact import apply_redactions
+from redaction.redact import apply_redactions
 
 
 input_pdf = "testdata/documents/test.pdf"
@@ -8,12 +8,12 @@ output_pdf = "testdata/documents/redacted.pdf"
 decisions = {
     "detections": [
         {
-            "page_index": 0,
+            "page_num": 0,
             "bbox": [186.0, 177.0, 332.0, 207.0],
             "text": "1234 5678 9012",
         },
         {
-            "page_index": 0,
+            "page_num": 0,
             "bbox": [164.46, 228.50, 225.58, 255.98],
             "text": "Rithika"
         }

@@ -1,4 +1,4 @@
-from luhn import (luhn_validate, luhn_generate_check_digit,
+from detection.luhn import (luhn_validate, luhn_generate_check_digit,
                   identify_network, is_card_number, mask_card)
 
 # Classic Luhn vector

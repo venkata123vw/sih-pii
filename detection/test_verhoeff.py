@@ -1,7 +1,11 @@
 import random
-from verhoeff import (
-    generate_check_digit, verhoeff_validate,
-    validate_aadhaar, format_aadhaar,
+
+from detection.verhoeff import (
+    generate_check_digit,
+    verhoeff_validate,
+    validate_aadhaar,
+    format_aadhaar,
+    mask_aadhaar,
 )
 
 # --- Standard Verhoeff vectors (published, reproducible) ---
@@ -31,10 +35,16 @@ assert validate_aadhaar('999999990019') is True
 
 assert format_aadhaar('234123412346') == '2341 2341 2346'
 
+# --- Aadhaar masking ---
+assert mask_aadhaar('234123412346') == 'XXXX XXXX 2346'
+assert mask_aadhaar('234123412346', reveal_last=2) == 'XXXX XXXX XX46'
+assert mask_aadhaar('234123412346', reveal_last=0) == 'XXXX XXXX XXXX'
+
 # --- Round trip: 1000 random prefixes ---
 for _ in range(1000):
     prefix = str(random.randint(2, 9)) + ''.join(
-        random.choice('0123456789') for _ in range(10))
+        random.choice('0123456789') for _ in range(10)
+    )
     assert validate_aadhaar(prefix + generate_check_digit(prefix))
 
 print('All Verhoeff / Aadhaar tests passed')

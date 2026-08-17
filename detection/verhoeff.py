@@ -103,7 +103,15 @@ def format_aadhaar(number: str) -> str:
 
 
 def mask_aadhaar(number: str, reveal_last: int = 4) -> str:
-    """UIDAI/RBI convention: mask the first 8 digits."""
+    """Mask all Aadhaar digits except the requested trailing digits."""
     n = clean(number)
-    keep = n[-reveal_last:] if reveal_last else ''
-    return format_aadhaar('X' * (12 - reveal_last) + keep).replace('X', 'X')
+
+    if len(n) != 12:
+        raise ValueError('Aadhaar number must contain exactly 12 digits')
+
+    if not 0 <= reveal_last <= 12:
+        raise ValueError('reveal_last must be between 0 and 12')
+
+    masked = 'X' * (12 - reveal_last) + n[-reveal_last:] if reveal_last else 'X' * 12
+
+    return f'{masked[0:4]} {masked[4:8]} {masked[8:12]}'
