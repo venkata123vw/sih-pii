@@ -1,0 +1,3 @@
+Synthetic PAN detection test.
+PAN-like value: ABCDE1234F
+This value is synthetic and for testing only.

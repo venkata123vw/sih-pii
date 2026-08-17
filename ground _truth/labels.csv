@@ -1,0 +1,10 @@
+file_name,pii_type
+test_01.txt,none
+test_02.pdf,none
+test_03.docx,none
+test_04.txt,pan
+test_05.txt,none
+test_06.txt,driving_licence
+test_07.csv,phone;email
+test_08.txt,none
+test_09.json,phone;email
