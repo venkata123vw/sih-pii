@@ -1,8 +1,17 @@
 # Policy matrix: context_profile -> pii_type -> action.
 # action in {REMOVE, MASK, KEEP, FLAG}.
 #
-# First draft, not yet reviewed by a policy owner. Adjust freely --
-# resolver.py just reads this file, no logic changes needed to retune it.
+# Matches the canonical matrix in the team workplan, section 3b. Values
+# there are the agreed source of truth, not a P3 guess -- resolver.py just
+# reads this file, no logic changes needed to retune it.
+#
+# KNOWN OPEN ISSUE (REGULATED_KYC): section 3b's prose posture says "the
+# ONE identifier the process legally requires is kept; every other
+# identifier is removed" -- but its own matrix has zero REMOVE actions in
+# this column (everything is MASK or KEEP). Left matching the literal
+# matrix below since that's what's actually specified cell-by-cell, but
+# this contradiction needs resolving with whoever owns section 3b before
+# treating this row as final.
 
 PUBLIC_DISCLOSURE:
   AADHAAR: REMOVE
@@ -11,22 +20,22 @@ PUBLIC_DISCLOSURE:
   CREDIT_CARD: REMOVE
   PHONE: REMOVE
   EMAIL: REMOVE
-  NAME: MASK
+  NAME: REMOVE
   ADDRESS: REMOVE
 
 THIRD_PARTY_SERVICE:
   AADHAAR: REMOVE
-  PAN: MASK
+  PAN: REMOVE
   DL: MASK
   CREDIT_CARD: REMOVE
-  PHONE: MASK
-  EMAIL: MASK
+  PHONE: KEEP
+  EMAIL: KEEP
   NAME: KEEP
   ADDRESS: MASK
 
 REGULATED_KYC:
   AADHAAR: MASK
-  PAN: MASK
+  PAN: KEEP
   DL: MASK
   CREDIT_CARD: MASK
   PHONE: KEEP
@@ -39,7 +48,7 @@ INTERNAL_REVIEW:
   PAN: FLAG
   DL: FLAG
   CREDIT_CARD: FLAG
-  PHONE: KEEP
-  EMAIL: KEEP
-  NAME: KEEP
-  ADDRESS: KEEP
+  PHONE: FLAG
+  EMAIL: FLAG
+  NAME: FLAG
+  ADDRESS: FLAG
