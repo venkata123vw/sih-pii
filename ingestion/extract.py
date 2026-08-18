@@ -1,10 +1,3 @@
-def extract(filepath: str) -> dict:
-    return {"doc_id": "stub", "source_type": "scanned_image",
-            "pages": [{"page_num": 0, "width": 1240, "height": 1754,
-                       "tokens": [{"text": "2341", "bbox": [100,200,160,230], "ocr_conf": 0.95},
-                                  {"text": "2341", "bbox": [165,200,225,230], "ocr_conf": 0.95},
-                                  {"text": "2346", "bbox": [230,200,290,230], "ocr_conf": 0.95}],
-                       "full_text": "Aadhaar 2341 2341 2346"}]}
 """
 P2 - PDF/Image Text Extraction Module
 
@@ -68,11 +61,57 @@ def _extract_native_page(page):
     return tokens, page.get_text()
 
 
+def _split_line_to_words(text, line_bbox, confidence):
+    """
+    EasyOCR returns whole LINES as single results (e.g. "Aadhaar: 1234 5678
+    9012"), but the native PDF path returns individual WORDS. Detection
+    joins adjacent word-level tokens to find values split across them, so
+    line-level tokens make detection match nothing on scanned documents.
+
+    This splits a line into words and spreads the line's bbox across them
+    proportionally by character position. Not pixel-perfect (doesn't
+    account for variable character width, e.g. "i" vs "W"), but close
+    enough for redaction boxes, and keeps the contract identical to the
+    native path (word-level tokens either way).
+    """
+    words = text.split()
+    if not words:
+        return []
+
+    x0, y0, x1, y1 = line_bbox
+    line_width = x1 - x0
+    total_len = len(text)
+
+    tokens = []
+    cursor = 0
+    for word in words:
+        start = text.index(word, cursor)
+        end = start + len(word)
+        cursor = end
+
+        frac_start = start / total_len
+        frac_end = end / total_len
+        word_x0 = x0 + frac_start * line_width
+        word_x1 = x0 + frac_end * line_width
+
+        tokens.append({
+            "text": word,
+            "bbox": [word_x0, y0, word_x1, y1],
+            "ocr_conf": confidence,
+        })
+
+    return tokens
+
+
 def _extract_ocr_page(page, reader, zoom=2.0):
     """
     Fallback for pages with no text layer: render to an image and OCR it.
     Rendered pixel coords are converted back into PDF point coords so
     bboxes line up with the page's own width/height (both in points).
+
+    EasyOCR returns whole lines as single results, so each line is split
+    into word-level tokens (see _split_line_to_words) to match the
+    word-level contract the native text path already produces.
     """
     pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom))
     img_bytes = pix.tobytes("png")
@@ -86,11 +125,9 @@ def _extract_ocr_page(page, reader, zoom=2.0):
             continue
         xs = [p[0] / zoom for p in bbox_points]  # pixels -> points
         ys = [p[1] / zoom for p in bbox_points]
-        tokens.append({
-            "text": text,
-            "bbox": [min(xs), min(ys), max(xs), max(ys)],
-            "ocr_conf": float(confidence),
-        })
+        line_bbox = [min(xs), min(ys), max(xs), max(ys)]
+
+        tokens.extend(_split_line_to_words(text, line_bbox, float(confidence)))
         full_text_parts.append(text)
 
     return tokens, " ".join(full_text_parts)
