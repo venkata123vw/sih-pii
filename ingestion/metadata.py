@@ -24,7 +24,10 @@ Only non-empty fields are emitted -- an absent field means "not present
 in this document", not "checked and blank".
 """
 import os
+import zipfile
+from xml.etree import ElementTree
 
+import docx
 import pymupdf
 
 # field -> category. Fields not listed here are skipped even if pymupdf
@@ -99,8 +102,60 @@ def _scan_pdf(filepath):
     return {"source_type": "pdf", "findings": findings}
 
 
+_DOCX_CORE_FIELDS = {
+    "author": "identity",
+    "last_modified_by": "identity",
+    "created": "timestamp",
+    "modified": "timestamp",
+    "revision": "tooling",
+    "title": "content",
+    "subject": "content",
+    "keywords": "content",
+    "comments": "content",
+    "category": "content",
+}
+
+_APP_XML_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/extended-properties}"
+_APP_XML_FIELDS = {
+    "Company": ("company", "organization"),
+    "Manager": ("manager", "identity"),
+    "Application": ("application", "tooling"),
+}
+
+
+def _scan_docx_app_properties(filepath):
+    """docProps/app.xml isn't exposed by python-docx's core_properties --
+    Company/Manager/Application live only here, parsed directly."""
+    findings = []
+    with zipfile.ZipFile(filepath) as zf:
+        if "docProps/app.xml" not in zf.namelist():
+            return findings
+        root = ElementTree.fromstring(zf.read("docProps/app.xml"))
+
+    for tag, (field, category) in _APP_XML_FIELDS.items():
+        el = root.find(f"{_APP_XML_NS}{tag}")
+        if el is not None and el.text and el.text.strip():
+            findings.append({"field": field, "value": el.text.strip(), "category": category})
+    return findings
+
+
+def _scan_docx(filepath):
+    findings = []
+    cp = docx.Document(filepath).core_properties
+    for attr, category in _DOCX_CORE_FIELDS.items():
+        value = getattr(cp, attr, None)
+        if value in (None, ""):
+            continue
+        findings.append({"field": attr, "value": str(value), "category": category})
+
+    findings.extend(_scan_docx_app_properties(filepath))
+    return {"source_type": "docx", "findings": findings}
+
+
 def scan_metadata(filepath: str) -> dict:
     ext = os.path.splitext(filepath)[1].lower()
     if ext == ".pdf":
         return _scan_pdf(filepath)
+    if ext == ".docx":
+        return _scan_docx(filepath)
     return {"source_type": "unsupported", "findings": []}

@@ -63,3 +63,43 @@ def test_pdf_embedded_files_are_reported(tmp_path):
     embedded = [f for f in r["findings"] if f["category"] == "embedded_file"]
     assert len(embedded) == 1
     assert embedded[0]["value"] == "hidden.txt"
+
+
+def test_docx_reports_python_docx_authorship_metadata():
+    """data/test_03.docx really was built with python-docx -- its own
+    core properties say so. This is itself the kind of leak this scanner
+    exists to catch (a document's authoring tool is on the record)."""
+    r = scan_metadata(str(DATA_DIR / "test_03.docx"))
+    assert r["source_type"] == "docx"
+    findings = {f["field"]: f for f in r["findings"]}
+    assert findings["author"]["value"] == "python-docx"
+    assert findings["author"]["category"] == "identity"
+    assert findings["created"]["category"] == "timestamp"
+
+
+def test_docx_company_and_manager_reported_when_present(tmp_path):
+    import zipfile
+    import shutil
+
+    src = DATA_DIR / "test_03.docx"
+    dst = tmp_path / "with_company.docx"
+    shutil.copy(src, dst)
+
+    with zipfile.ZipFile(dst, "a") as z:
+        app_xml = z.read("docProps/app.xml").decode("utf-8")
+    app_xml = app_xml.replace("<Company/>", "<Company>Acme Synthetic Corp</Company>")
+    app_xml = app_xml.replace("<Manager/>", "<Manager>Jamie Synthetic Manager</Manager>")
+
+    # zipfile can't overwrite an entry in place -- rewrite the whole archive
+    tmp_zip = tmp_path / "rebuilt.docx"
+    with zipfile.ZipFile(dst) as zin, zipfile.ZipFile(tmp_zip, "w") as zout:
+        for item in zin.infolist():
+            data = app_xml.encode("utf-8") if item.filename == "docProps/app.xml" else zin.read(item.filename)
+            zout.writestr(item, data)
+
+    r = scan_metadata(str(tmp_zip))
+    findings = {f["field"]: f for f in r["findings"]}
+    assert findings["company"]["value"] == "Acme Synthetic Corp"
+    assert findings["company"]["category"] == "organization"
+    assert findings["manager"]["value"] == "Jamie Synthetic Manager"
+    assert findings["manager"]["category"] == "identity"
