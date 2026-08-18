@@ -65,4 +65,43 @@ NER_CANDIDATE = {
 score = confidence.score(NER_CANDIDATE, AADHAAR_CTX)
 assert score == 0.5
 
+# --- PAN signals (detection.pan.pan_signals()): PAN has no checksum, so
+# entity-code/serial plausibility feed confidence as signals, not a gate.
+def _pan_page(text):
+    return {"pages": [{"page_num": 0, "width": 100, "height": 100, "tokens": [], "full_text": text}]}
+
+# Known entity code (P), nonzero serial -> keyword match only, no PAN penalty
+clean_pan = {"pii_type": "PAN", "value": "ALWPG5809L", "page_num": 0,
+             "bbox": None, "checksum_valid": None, "match_source": "regex"}
+score = confidence.score(clean_pan, _pan_page("PAN Number: ALWPG5809L"))
+assert abs(score - 0.25) < 1e-9
+assert "pan_unknown_entity_code" not in confidence.signal_reasons(clean_pan, _pan_page("PAN Number: ALWPG5809L"))
+
+# Unknown entity code ('D' is not an ITD entity code) -> -0.15
+unknown_entity_pan = {"pii_type": "PAN", "value": "ABCDE1234F", "page_num": 0,
+                       "bbox": None, "checksum_valid": None, "match_source": "regex"}
+ctx = _pan_page("PAN Number: ABCDE1234F")
+score = confidence.score(unknown_entity_pan, ctx)
+assert abs(score - (0.25 - 0.15)) < 1e-9
+assert "pan_unknown_entity_code" in confidence.signal_reasons(unknown_entity_pan, ctx)
+
+# Zero serial ('0000') -> -0.25
+zero_serial_pan = {"pii_type": "PAN", "value": "ALWPP0000L", "page_num": 0,
+                    "bbox": None, "checksum_valid": None, "match_source": "regex"}
+ctx = _pan_page("PAN Number: ALWPP0000L")
+score = confidence.score(zero_serial_pan, ctx)
+assert abs(score - (0.25 - 0.25)) < 1e-9
+assert "pan_zero_serial" in confidence.signal_reasons(zero_serial_pan, ctx)
+
+# Both penalties stack, clamped to 0 rather than going negative
+both_pan = {"pii_type": "PAN", "value": "ABCDE0000F", "page_num": 0,
+            "bbox": None, "checksum_valid": None, "match_source": "regex"}
+ctx = _pan_page("PAN Number: ABCDE0000F")
+assert confidence.score(both_pan, ctx) == 0.0
+reasons = confidence.signal_reasons(both_pan, ctx)
+assert "pan_unknown_entity_code" in reasons and "pan_zero_serial" in reasons
+
+# Non-PAN candidates are never touched by the PAN signal path
+assert "pan_unknown_entity_code" not in confidence.signal_reasons(AADHAAR_CANDIDATE, AADHAAR_CTX)
+
 print("All confidence tests passed")

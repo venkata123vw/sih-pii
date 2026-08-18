@@ -70,4 +70,26 @@ assert signals["negative_match"] is True
 # find_page: missing page_num returns None
 assert context.find_page(AADHAAR_CTX, 7) is None
 
+# --- Regression: bbox=None must not crash (pasted text / CSV, legal per
+# the detection contract) -- previously an unguarded 4-tuple unpack in
+# ocr_confidence()/_bbox_overlap() raised TypeError here, verified as a
+# real crash blocking the paste-text feature in pipeline.py.
+assert context.ocr_confidence(AADHAAR_PAGE, None) is None
+
+# Regression: pasted-text tokens carry neither bbox nor ocr_conf at all
+# (pipeline.py builds them as {"text": w} only) -- must be skipped, not KeyError.
+PASTED_TEXT_PAGE = {
+    "page_num": 0, "width": 0, "height": 0,
+    "tokens": [{"text": "Aadhaar"}, {"text": "1234"}, {"text": "5678"}, {"text": "9012"}],
+    "full_text": "Aadhaar 1234 5678 9012",
+}
+PASTED_TEXT_CANDIDATE = {
+    "pii_type": "AADHAAR", "value": "1234 5678 9012", "page_num": 0,
+    "bbox": None, "checksum_valid": True, "match_source": "regex",
+}
+assert context.ocr_confidence(PASTED_TEXT_PAGE, PASTED_TEXT_CANDIDATE["bbox"]) is None
+signals = context.get_signals(PASTED_TEXT_CANDIDATE, {"pages": [PASTED_TEXT_PAGE]})
+assert signals["keyword_match"] is True   # keyword/negative signals still work, they don't need bbox
+assert signals["ocr_conf"] is None
+
 print("All context tests passed")
