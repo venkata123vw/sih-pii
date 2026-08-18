@@ -92,18 +92,31 @@ def test_formatless_types_report_checksum_none():
     assert _by_type(out, "EMAIL")["checksum_valid"] is None
 
 
-def test_bare_ten_digits_is_not_a_phone():
+def test_bare_ten_digits_without_context_is_not_a_phone():
     """
     Measured 10% FP: a bare unpunctuated 10-digit run starting 6-9 is a
-    rupee amount as often as a phone number. Require grouping or an
-    explicit +91/0 prefix.
+    rupee amount as often as a phone number. With no prefix, no grouping
+    and no phone keyword on the page, it is not a phone.
     """
     out = detect(_extraction(_page(["Total", "9432835008"])))
     assert "PHONE" not in _types(out)
 
 
+def test_bare_ten_digits_with_keyword_is_a_phone():
+    """
+    Regression guard. An earlier version tested the raw string's leading
+    digits, so '9198765432' passed (starts 9,1 — looked like a +91 prefix)
+    while '9876543210' was silently dropped. Detection then depended on a
+    coincidence of the first two digits. Every bare form below must behave
+    identically.
+    """
+    for number in ("9876543210", "9123456780", "9198765432", "8765432109"):
+        out = detect(_extraction(_page(["Mobile:", number])))
+        assert "PHONE" in _types(out), number
+
+
 def test_phone_formats_still_detected():
-    """The tightening must not cost recall on real-world formats."""
+    """Corroboration must not cost recall on real-world formats."""
     for words in (["Mob", "98765", "43210"], ["+919876543210"],
                   ["09876543210"], ["919876543210"]):
         out = detect(_extraction(_page(words)))
