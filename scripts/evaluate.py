@@ -23,11 +23,6 @@ detection.detect()'s own regex+checksum filtering already passed, so
 confidence's job at that point is separating genuine signal from
 suppressed noise (e.g. the invoice-decoy case, correctly pushed to 0.0 by
 a negative signal) -- not acting as a second detection gate.
-
-Known exclusion: test_07.csv and test_09.json crash pipeline.analyze()
-with a Windows file-locking PermissionError in ingestion's temp-file
-handling. Not a scoring/ bug -- reported to whoever owns ingestion/,
-excluded here rather than silently masked.
 """
 
 import csv
@@ -50,7 +45,7 @@ LABEL_MAP = {
 }
 SCORED_TYPES = {v for v in LABEL_MAP.values() if v}  # only types ground truth can actually judge
 
-EXCLUDED_FILES = {"test_07.csv", "test_09.json"}  # see docstring: ingestion PermissionError on Windows
+EXCLUDED_FILES = set()  # was {"test_07.csv", "test_09.json"} -- fixed in ingestion.extract
 CONFIDENCE_THRESHOLD = 0.0  # strictly greater than this counts as "predicted"
 
 

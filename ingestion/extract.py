@@ -5,7 +5,7 @@ Emits the contract shape agreed with detection/scoring/redaction:
 
 {
     "doc_id": "<sha256 prefix>",
-    "source_type": "text_pdf" | "scanned_image",
+    "source_type": "text_pdf" | "scanned_image" | "plain_text",  # plain_text: .csv/.json
     "pages": [
         {
             "page_num": 0,              # zero-indexed
@@ -28,9 +28,15 @@ Emits the contract shape agreed with detection/scoring/redaction:
 Native text-layer PDFs are handled directly (fast, exact bboxes).
 Pages with no text layer fall back to OCR (EasyOCR) automatically,
 so scanned PDFs and images both work without a separate code path.
+
+.csv and .json have no pymupdf document handler, so they're read as
+plain text: one page, tokens are cell/value words with no bbox/ocr_conf
+keys (coordinate-less, same shape pipeline.py's pasted-text path uses).
 """
 
+import csv
 import hashlib
+import json
 import os
 
 import pymupdf
@@ -103,6 +109,59 @@ def _split_line_to_words(text, line_bbox, confidence):
     return tokens
 
 
+def _flatten_json_values(node, out):
+    """Collect leaf string/number/bool values from arbitrary JSON,
+    ignoring keys -- detection matches against values, not field names."""
+    if isinstance(node, dict):
+        for v in node.values():
+            _flatten_json_values(v, out)
+    elif isinstance(node, list):
+        for v in node:
+            _flatten_json_values(v, out)
+    elif node is not None:
+        out.append(str(node))
+
+
+def _extract_csv(filepath):
+    """
+    CSV has no native pymupdf document handler (confirmed: opening one
+    raises pymupdf.FileDataError and orphans a file handle on Windows,
+    which is the actual PermissionError this function exists to avoid).
+    Cells are the token unit -- splitting only on whitespace would leave
+    comma-glued cells like 'Morgan,9876543210,x@example.com' as one
+    token, which detection's anchored (^...$) patterns can't match.
+    """
+    with open(filepath, newline="", encoding="utf-8") as fh:
+        rows = list(csv.reader(fh))
+
+    words = []
+    for row in rows:
+        for cell in row:
+            words.extend(cell.split())
+    tokens = [{"text": w} for w in words]
+    full_text = "\n".join(",".join(row) for row in rows)
+    return tokens, full_text
+
+
+def _extract_json(filepath):
+    """
+    Same rationale as _extract_csv: pymupdf has no JSON handler, and raw
+    whitespace-splitting would leave quotes/commas/braces glued to
+    values (e.g. '"9000012345",'), which anchored patterns can't match.
+    """
+    with open(filepath, encoding="utf-8") as fh:
+        raw_text = fh.read()
+    data = json.loads(raw_text)
+
+    values = []
+    _flatten_json_values(data, values)
+    words = []
+    for v in values:
+        words.extend(v.split())
+    tokens = [{"text": w} for w in words]
+    return tokens, raw_text
+
+
 def _extract_ocr_page(page, reader, zoom=2.0):
     """
     Fallback for pages with no text layer: render to an image and OCR it.
@@ -133,17 +192,44 @@ def _extract_ocr_page(page, reader, zoom=2.0):
     return tokens, " ".join(full_text_parts)
 
 
+_PLAIN_TEXT_EXTENSIONS = {".csv", ".json"}
+
+
 def extract(filepath: str, reader=None) -> dict:
     """
     Main entry point. Reads the real file at `filepath`.
 
-    Per-page logic:
+    .csv/.json are read as plain text and never handed to pymupdf, which
+    has no document handler for either -- doing so raises FileDataError
+    and, on Windows, orphans a file handle that later breaks the temp
+    file's cleanup (see pipeline.py's analyze()). Every other extension
+    (including .txt and .docx, both of which pymupdf opens natively)
+    goes through the existing PDF/OCR path unchanged.
+
+    Per-page logic for the pymupdf path:
       - if the page has a native text layer, extract it directly (fast, exact).
       - if not, fall back to OCR for that page only (so mixed PDFs work too).
 
     `source_type` on the doc is "scanned_image" only if NO page anywhere
-    in the doc had a native text layer; otherwise "text_pdf".
+    in the doc had a native text layer; "plain_text" for .csv/.json;
+    otherwise "text_pdf".
     """
+    ext = os.path.splitext(filepath)[1].lower()
+    if ext in _PLAIN_TEXT_EXTENSIONS:
+        extractor = _extract_csv if ext == ".csv" else _extract_json
+        tokens, full_text = extractor(filepath)
+        return {
+            "doc_id": _doc_id(filepath),
+            "source_type": "plain_text",
+            "pages": [{
+                "page_num": 0,
+                "width": 0,
+                "height": 0,
+                "tokens": tokens,
+                "full_text": full_text,
+            }],
+        }
+
     doc = pymupdf.open(filepath)
     pages = []
     any_native_text = False
