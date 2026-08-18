@@ -8,7 +8,7 @@ python -m scripts.evaluate
 
 ## Result
 
-**precision = 1.00, recall = 0.50, F1 = 0.67** (tp=1, fp=0, fn=1)
+**precision = 1.00, recall = 1.00, F1 = 1.00** (tp=6, fp=0, fn=0)
 
 Measured by running the real pipeline (`pipeline.analyze()` — `ingestion.extract`
 → `detection.detect` → `scoring.score`, no hand-built fixtures) against the
@@ -21,25 +21,31 @@ actual files in `data/` and comparing against `ground_truth/labels.csv`.
 | test_03.docx | none | none | OK |
 | test_04.txt | PAN | PAN | OK |
 | test_05.txt | none | none | OK |
-| test_06.txt | DL | none | **MISS** |
+| test_06.txt | DL | DL | OK |
+| test_07.csv | phone, email | phone, email | OK |
 | test_08.txt | none | none | OK |
-| test_07.csv | phone, email | — | excluded (see below) |
-| test_09.json | phone, email | — | excluded (see below) |
+| test_09.json | phone, email | phone, email | OK |
 
-## The one miss, explained
+All 9 files in `data/` now score, and all 9 match ground truth.
 
-`test_06.txt` is a synthetic driving licence document. It isn't detected because
-`detection/detect.py`'s pattern registry has no `DL` entry at all — there is no
-regex for a driving licence number, so it never becomes a candidate in the first
-place. This is a gap in another track's file, not in scoring — confidence and
-policy resolution never get a chance to run on something that was never detected.
-Flagged to whoever owns `detection/detect.py`.
+## What used to be excluded, and what fixed it
+
+Two gaps existed as of the last evaluation run and have since been closed:
+
+- **`test_06.txt`'s missing `DL` detection** — `detection/detect.py`'s pattern
+  registry had no `DL` entry. Fixed: a `DL` entry (format `[A-Z]{5}\d{9}`,
+  keyword-gated) now exists in the registry, and `contracts.md` was updated to
+  list `DL` as a valid `pii_type`.
+- **`test_07.csv`, `test_09.json` crashing `pipeline.analyze()`** — pymupdf has
+  no document handler for `.csv`/`.json`; asking it to open one raised
+  `FileDataError` and, on Windows, orphaned a file handle that broke the temp
+  file's cleanup. Fixed in `ingestion/extract.py`: both extensions are now read
+  as plain text (real `csv`/`json` parsing, not naive whitespace-splitting —
+  needed because `detection/detect.py`'s patterns are anchored against the
+  whole token) before pymupdf is ever invoked.
 
 ## What's excluded from the metric, and why
 
-- **`test_07.csv`, `test_09.json`** — both crash `pipeline.analyze()` with a
-  Windows-specific `PermissionError` in `ingestion.extract`'s temp-file handling.
-  Not a scoring bug; excluded rather than silently skipped or faked.
 - **NAME/ADDRESS (NER) detections** — reported by the eval script but not scored.
   `ground_truth/labels.csv`'s taxonomy only covers government-ID-style types
   (aadhaar, pan, driving_licence, credit_card, phone, email); it has no NAME or
@@ -51,22 +57,23 @@ Flagged to whoever owns `detection/detect.py`.
 
 ## Honest limitations of this number
 
-- **Small sample.** 6 files actually scored. This is a sanity check that the
-  scoring pipeline is wired correctly end-to-end, not a statistically meaningful
-  accuracy claim.
+- **Small sample.** 9 files scored, 6 with a positive label. This is a sanity
+  check that the pipeline is wired correctly end-to-end, not a statistically
+  meaningful accuracy claim.
 - **Doc-level ground truth, not per-field.** `labels.csv` says which pii_types
   appear somewhere in a file, not their exact location/count. A file with the
   right type detected in the wrong place would still read as correct here.
-- **Zero false positives so far** is a real, verified result (the invoice-decoy
-  document with a 12-digit number correctly produces no detections at all, and
-  a negative-signal false positive from NER — "Wireless Keyboard" misread as a
-  name — correctly scores confidence 0.2, not enough to be a policy concern) —
-  but it's one data point, not proof the negative-signal design generalizes.
+- **Perfect precision/recall on 9 files is a real, verified result** (the
+  invoice-decoy document with a 12-digit number correctly produces no
+  detections at all, and a negative-signal false positive from NER —
+  "Wireless Keyboard" misread as a name — correctly scores confidence 0.2, not
+  enough to be a policy concern) — but it's a small, synthetic set, not proof
+  the detection/confidence design generalizes to real-world documents.
 
-## What would raise this number
+## What would raise confidence in this number further
 
-Not more scoring logic — the confidence/policy layer is doing what it's supposed
-to on every file it's actually given a chance to see. The gap is upstream: a `DL`
-pattern in `detection/detect.py`'s registry, a fix to `ingestion.extract`'s
-Windows temp-file handling, and eventually a larger, per-field ground truth set
-from whoever owns `ground_truth/`.
+Not more scoring logic — every file the pipeline is given a chance to see is
+handled correctly right now. The remaining gap is dataset size: a larger,
+per-field ground truth set from whoever owns `ground_truth/`, covering more
+documents and more PII density per document than the current 9-file
+sanity-check set.
