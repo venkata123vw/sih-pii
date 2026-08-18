@@ -13,12 +13,16 @@ DEFAULT_POLICY_PATH = Path(__file__).resolve().parent.parent / "policy" / "profi
 # purpose under this profile? Falls back to OPTIONAL for anything not
 # listed.
 #
-# REGULATED_KYC is still an open question, not a considered answer: the
-# workplan's own section 3b says "the ONE identifier the process legally
-# requires is kept; every other identifier is removed" -- which implies
-# only one type here should be REQUIRED, not most of them. Left as a
-# rough placeholder pending a real decision on which single identifier
-# that is for a given KYC context -- don't treat this row as final.
+# REGULATED_KYC: most types are REQUIRED here because KYC verification
+# genuinely needs them present and legible -- necessity ("is it needed")
+# is intentionally a separate axis from policy_action ("what happens to
+# it"). policy/profiles.yaml MASKs the government IDs (AADHAAR, DL,
+# CREDIT_CARD) rather than fully exposing them, so a type can be both
+# REQUIRED and still redacted down to a partial value; that's not a
+# contradiction, it's the point of keeping the two axes separate. This
+# row's specific REQUIRED/OPTIONAL split is the team's own judgment call,
+# matched to the workplan but not independently reviewed by a compliance
+# source (see DPDP_COMPLIANCE.md's "Known limitation" section).
 NECESSITY_MATRIX = {
     "REGULATED_KYC": {
         "AADHAAR": "REQUIRED", "PAN": "REQUIRED", "DL": "REQUIRED",

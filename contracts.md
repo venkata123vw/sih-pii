@@ -47,9 +47,11 @@ Rules:
   what's passed in.
 - `policy_action`/`necessity` come from `policy/profiles.yaml`, a first-draft
   policy matrix (not reviewed by a policy owner yet ΓÇö see that file).
-- NER-derived detections (`ner.py`, currently a stub returning `[]`) will
-  land in the same `detections` list with `pii_type: "NAME"` or `"ADDRESS"`,
-  `checksum_valid: None`, `match_source: "ner"`, same added fields.
+- NER-derived detections (`ner.py`, real spaCy `en_core_web_sm` NER, not a
+  stub) land in the same `detections` list with `pii_type: "NAME"` or
+  `"ADDRESS"`, `checksum_valid: None`, `match_source: "ner"`, same added
+  fields. Confidence is capped at 0.5 (see `confidence.py`) since NER has
+  no structural proof the way checksum-backed regex matches do.
 ## Detection output (`detection.detect.detect()`) ΓÇö owned by detection/
 
 Consumed by `scoring.score.score()` as `candidates_payload`.
