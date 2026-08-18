@@ -168,22 +168,51 @@ def _scan_page(page, doc_id):
 
 def _resolve_overlaps(hits):
     """
-    Two types can claim the same tokens (a 16-digit RuPay also contains
-    a 12-digit Verhoeff-valid run). Keep the longest span; break ties on
-    priority. Drop anything fully contained in a survivor.
+    Resolve competing detections that share OCR tokens.
+
+    Stronger candidates are preferred in this order:
+      1. Longer token span
+      2. Higher registry priority
+      3. Earlier starting position
+
+    Once a candidate is kept, ANY candidate sharing even one token
+    with it is rejected.
+
+    Example:
+        candidate A -> tokens 1-4
+        candidate B -> tokens 4-5
+
+    These overlap on token 4, so only the stronger candidate survives.
     """
-    ordered = sorted(hits, key=lambda h: (-(h['_span'][1] - h['_span'][0]),
-                                          -h['_priority']))
+    ordered = sorted(
+        hits,
+        key=lambda h: (
+            -(h['_span'][1] - h['_span'][0]),
+            -h['_priority'],
+            h['_span'][0],
+        )
+    )
+
     kept = []
+
     for h in ordered:
         s, e = h['_span']
-        if any(k['_span'][0] <= s and e <= k['_span'][1] for k in kept):
-            continue
-        kept.append(h)
-    for h in kept:
-        h.pop('_span'), h.pop('_priority')
-    return kept
 
+        overlaps = any(
+            not (e <= k['_span'][0] or s >= k['_span'][1])
+            for k in kept
+        )
+
+        if overlaps:
+            continue
+
+        kept.append(h)
+
+    for h in kept:
+        h.pop('_span')
+        h.pop('_priority')
+
+    return kept
 
 def detect(extraction) -> dict:
     """extraction = P2's output dict. Returns the P1 -> P3 contract."""

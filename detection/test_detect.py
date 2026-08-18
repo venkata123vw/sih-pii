@@ -173,3 +173,31 @@ def test_bbox_none_survives_fieldless_sources():
             "full_text": "234123412346"}
     out = detect(_extraction(page))
     assert _by_type(out, "AADHAAR")["bbox"] is None
+
+
+def test_partial_overlap_keeps_only_stronger_candidate():
+    """
+    Two candidates share a token but neither fully contains the other.
+
+    The stronger candidate must win. This protects against duplicate
+    detections/redactions caused by partial token-span overlap.
+    """
+    from detection.detect import _resolve_overlaps
+
+    hits = [
+        {
+            "pii_type": "TYPE_A",
+            "_span": (0, 4),
+            "_priority": 90,
+        },
+        {
+            "pii_type": "TYPE_B",
+            "_span": (3, 5),
+            "_priority": 60,
+        },
+    ]
+
+    result = _resolve_overlaps(hits)
+
+    assert len(result) == 1
+    assert result[0]["pii_type"] == "TYPE_A"
