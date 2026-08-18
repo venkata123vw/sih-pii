@@ -1,6 +1,5 @@
 import pymupdf
 
-# Create a new PDF
 doc = pymupdf.open()
 
 # -------------------------
@@ -32,12 +31,10 @@ page2.insert_text(
     fontsize=20
 )
 
-# Rotate the SECOND page by 90 degrees
+# Rotate second page
 page2.set_rotation(90)
 
-# Save
 doc.save("testdata/documents/test.pdf")
-
 doc.close()
 
 print("Final 2-page test PDF created successfully!")
