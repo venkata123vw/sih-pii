@@ -1,13 +1,15 @@
 {
   "test_aadhaar_valid": {
+    "words": ["Aadhaar", "2341", "2341", "2346"],
     "pii": [
       {
         "pii_type": "AADHAAR",
-        "value": "491417776310"
+        "value": "2341 2341 2346"
       }
     ]
   },
   "test_pan": {
+    "words": ["PAN", "ALWPG5809L"],
     "pii": [
       {
         "pii_type": "PAN",
@@ -16,6 +18,7 @@
     ]
   },
   "test_phone": {
+    "words": ["Mobile:", "9876543210"],
     "pii": [
       {
         "pii_type": "PHONE",
@@ -24,6 +27,7 @@
     ]
   },
   "test_email": {
+    "words": ["Email:", "test@example.com"],
     "pii": [
       {
         "pii_type": "EMAIL",
@@ -32,6 +36,7 @@
     ]
   },
   "test_clean": {
+    "words": ["Invoice", "Total", "4500", "Rupees"],
     "pii": []
   }
 }

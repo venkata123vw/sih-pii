@@ -47,65 +47,31 @@ def extraction(*pages):
 
 # ---------------------------------------------------------
 # Evaluation dataset
+#
+# Loaded from evaluation/datasets/ground_truth.json rather than
+# hardcoded here, so the fixtures are editable data, not code. Each
+# case's "words" become the synthetic page's tokens (via page()/
+# extraction() above); "pii" is the expected detections to compare
+# detect()'s output against.
 # ---------------------------------------------------------
 
-DATASET = [
-    {
-        "name": "test_aadhaar_valid",
-        "input": extraction(
-            page(["Aadhaar", "2341", "2341", "2346"])
-        ),
-        "expected": [
-            {
-                "pii_type": "AADHAAR",
-                "value": "2341 2341 2346"
-            }
-        ],
-    },
-    {
-        "name": "test_pan",
-        "input": extraction(
-            page(["PAN", "ALWPG5809L"])
-        ),
-        "expected": [
-            {
-                "pii_type": "PAN",
-                "value": "ALWPG5809L",
-            }
-        ],
-    },
-    {
-        "name": "test_phone",
-        "input": extraction(
-            page(["Mobile:", "9876543210"])
-        ),
-        "expected": [
-            {
-                "pii_type": "PHONE",
-                "value": "9876543210",
-            }
-        ],
-    },
-    {
-        "name": "test_email",
-        "input": extraction(
-            page(["Email:", "test@example.com"])
-        ),
-        "expected": [
-            {
-                "pii_type": "EMAIL",
-                "value": "test@example.com",
-            }
-        ],
-    },
-    {
-        "name": "test_clean",
-        "input": extraction(
-            page(["Invoice", "Total", "4500", "Rupees"])
-        ),
-        "expected": [],
-    },
-]
+DATASET_PATH = PROJECT_ROOT / "evaluation" / "datasets" / "ground_truth.json"
+
+
+def load_dataset(path: Path) -> list[dict]:
+    with path.open(encoding="utf-8") as f:
+        raw = json.load(f)
+    return [
+        {
+            "name": name,
+            "input": extraction(page(case["words"])),
+            "expected": case["pii"],
+        }
+        for name, case in raw.items()
+    ]
+
+
+DATASET = load_dataset(DATASET_PATH)
 
 
 # ---------------------------------------------------------
