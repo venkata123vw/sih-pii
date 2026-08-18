@@ -1,27 +1,23 @@
 """
 pipeline.py — P5's orchestration layer, wired to real teammate modules.
 
-Status per track (as of this integration pass):
-    ingestion.extract  — REAL function, STUB body. extract(filepath) always
-                          returns the same fixed fake Aadhaar-only page,
-                          regardless of what file you upload. This is not a
-                          bug in pipeline.py or app.py — until ingestion
-                          ships real OCR/PDF-text-layer code, every upload
-                          will show the same detections. Re-run this file's
-                          smoke test once ingestion.extract is real.
+Status per track (verified directly against each module, not assumed):
+    ingestion.extract  — REAL. Native text-layer PDFs handled directly;
+                          pages with no text layer fall back to OCR
+                          (EasyOCR) automatically. Emits PDF-point-space
+                          bboxes uniformly for both paths (see below).
     detection.detect    — REAL. Regex + checksum, tuned FP rates.
-    scoring.score       — REAL. confidence + policy resolution + NER hook
-                          (NER itself is still a stub returning []).
+    scoring.score       — REAL. confidence + policy resolution + real NER
+                          (spaCy en_core_web_sm — no longer a stub).
     redaction.redact    — REAL. Mutates a PDF file ON DISK — very different
                           calling convention from the old stub (see apply()).
 
-Three integration fixes made in this pass, worth telling the team about:
+Three integration fixes made in an earlier pass, still relevant:
 
 1. page_ctx shape. score()'s real context.find_page() does
    `for page in page_ctx.get("pages", [])` — it wants the WHOLE extraction
-   dict, not a {page_num: text} lookup map (my first attempt at fixing the
-   earlier "confidence stuck at 0.4" bug used the wrong shape). Fixed here:
-   page_ctx = extraction, passed straight through.
+   dict, not a {page_num: text} lookup map. Fixed here: page_ctx =
+   extraction, passed straight through.
 
 2. extract() takes a filepath, not bytes. Streamlit gives you bytes, so
    analyze() writes them to a temp file first.
@@ -30,31 +26,27 @@ Three integration fixes made in this pass, worth telling the team about:
    (bytes, report) like the old stub. apply() below wraps it with temp
    files both ways and reads the output back into bytes for the UI.
 
-KNOWN BUG (verified, blocks paste-text) — scoring/context.py line 81,
-ocr_confidence(): `t["bbox"]` and _bbox_overlap() both unconditionally
-unpack bbox as a 4-tuple. Any candidate with bbox=None (pasted text, CSV,
-any coordinate-less source — explicitly legal per detect.py's own test
-test_bbox_none_survives_fieldless_sources) crashes score() with a
-KeyError/TypeError. File-upload works fine today only because ingestion's
-current stub always fills in a bbox. Report to whoever owns scoring/ —
-needs a None-guard before line 81. Until fixed, app.py catches this and
-shows a friendly message instead of crashing on the paste-text tab.
+RESOLVED — bbox=None crash on paste-text/CSV: two separate bugs, both
+fixed. scoring/context.py's ocr_confidence() used to unpack bbox as a
+4-tuple unconditionally; scoring/ner.py's _bbox_for_span() had the same
+issue for NER-derived detections specifically (needed a name/address in
+the text to trigger, not just a bare coordinate-less candidate). Both
+now treat bbox=None as the legal state it is for coordinate-less sources
+(pasted text, CSV) rather than crashing or silently dropping the
+detection. If paste-text still crashes with a 'bbox' KeyError after
+pulling this, that's a different bug — get the full server-side
+traceback rather than assuming it's either of these two again.
 
-KNOWN RISK — coordinate spaces: ingestion's fake bboxes are in OCR pixel
-space (~1240x1754, roughly A4 at 150dpi). redact.py's apply_redactions()
-expects PDF-point space (pymupdf's native coordinate system, e.g. ~595x842
-for A4). These do NOT match. This won't surface as an error today because
-ingestion is still a stub feeding fixed data into a test — but the moment
-real OCR output gets wired in for scanned images, redaction boxes will
-land in the wrong place unless someone converts pixel coords to PDF points
-(or ingestion emits PDF-point coordinates directly for the OCR path). Flag
-this to whoever owns ingestion + redaction before that swap happens.
+RESOLVED — coordinate spaces: ingestion.extract() emits bboxes in PDF
+points for both the native-text and OCR paths (documented and enforced
+in its own module docstring), matching what redact.py expects. There is
+no pixel/point mismatch to convert.
 
-ASSUMPTION TO VERIFY: redact.py is imported below as `redaction.redact`,
-matching the detection/scoring package pattern. But test_redact.py and
-test_p4_to_p2.py both do `from redact import ...` (no package prefix) —
-if their test runner works, check whether redact.py actually lives at
-repo root instead of inside redaction/, and fix the import below if so.
+RESOLVED — redact.py's location: it lives in redaction/redact.py, and
+the package-qualified import below is correct. redaction/test_redact.py
+and test_p4_to_p2.py use a different (`from redact import ...`) style
+because they're run standalone from within redaction/ itself — same
+dual-convention pattern scoring/'s own tests use, not a bug.
 """
 
 import os
