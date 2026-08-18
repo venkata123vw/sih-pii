@@ -1,3 +1,4 @@
+from detection.detect import detect
 from scoring.score import score
 
 PAGE_CTX = {
@@ -50,5 +51,30 @@ assert result_no_ctx["detections"][0]["confidence"] < result["detections"][0]["c
 
 # confidence and policy_action are computed independently -- never collapsed
 assert "confidence" in d and "policy_action" in d and d["confidence"] != d["policy_action"]
+
+# --- Pasted-text regression: exact shape pipeline.py's analyze_pasted_text()
+# builds (tokens = [{"text": w} for w in text.split()], no bbox/ocr_conf at
+# all). Real detection.detect() -> scoring.score() end to end, matching a
+# reported bug where NER's bbox handling crashed on exactly this shape.
+def _pasted(text: str) -> dict:
+    tokens = [{"text": w} for w in text.split()]
+    return {
+        "doc_id": "pasted-text", "source_type": "plain_text",
+        "pages": [{"page_num": 0, "width": 0, "height": 0, "tokens": tokens, "full_text": text}],
+    }
+
+
+for text in [
+    "6563 2299 1528",                                    # valid Aadhaar alone
+    "Email: taylor.synthetic@example.com",               # email
+    "Phone: 9876543210",                                 # phone
+    "Just a plain sentence with no identifiers at all",  # no PII
+    "Contact Ravi Kumar at Mumbai regarding Aadhaar 6563 2299 1528",  # NER + regex together
+]:
+    extraction = _pasted(text)
+    candidates = detect(extraction)
+    result = score(candidates, "THIRD_PARTY_SERVICE", extraction)  # must not raise
+    for detection in result["detections"]:
+        assert detection["bbox"] is None   # coordinate-less source -> stays None, never invented
 
 print("All score wiring tests passed")

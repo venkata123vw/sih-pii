@@ -1,6 +1,13 @@
 """
 NAME/ADDRESS detection via spaCy en_core_web_sm (pretrained, no training).
 
+SETUP: `pip install spacy` alone is not enough -- the model itself is a
+separate download. After installing requirements, also run:
+    python -m spacy download en_core_web_sm
+Skipping this raises OSError: Can't find model 'en_core_web_sm' the first
+time detect() runs, on any machine that hasn't run it before (a fresh
+clone, a demo laptop).
+
 spaCy has no dedicated ADDRESS label, so GPE/LOC/FAC (city, state, road,
 landmark names) are mapped to ADDRESS as an approximation -- this catches
 locality names but not house numbers or PIN codes (spotchecked: a PIN code
@@ -56,15 +63,24 @@ def _token_spans(full_text: str, tokens: list[dict]) -> list[tuple[int, int, dic
 
 
 def _bbox_for_span(spans: list[tuple[int, int, dict]], start: int, end: int) -> list | None:
-    """Union bbox of every token overlapping [start, end). None if no token overlaps."""
+    """
+    Union bbox of every token overlapping [start, end).
+
+    None if no token overlaps, or if none of the overlapping tokens carry
+    a bbox at all -- pasted-text tokens are built as {"text": w} only (see
+    pipeline.py's analyze_pasted_text()), with no bbox/ocr_conf keys.
+    Coordinate-less is a legal state throughout this contract (detect.py
+    emits bbox=None for CSV/text sources too), not an error case.
+    """
     matching = [tok for (s, e, tok) in spans if s < end and start < e]
-    if not matching:
+    usable = [t for t in matching if t.get("bbox") is not None]
+    if not usable:
         return None
     return [
-        min(t["bbox"][0] for t in matching),
-        min(t["bbox"][1] for t in matching),
-        max(t["bbox"][2] for t in matching),
-        max(t["bbox"][3] for t in matching),
+        min(t["bbox"][0] for t in usable),
+        min(t["bbox"][1] for t in usable),
+        max(t["bbox"][2] for t in usable),
+        max(t["bbox"][3] for t in usable),
     ]
 
 
@@ -83,9 +99,12 @@ def detect(page: dict, profile: str, policy_matrix: dict) -> list[dict]:
         if pii_type is None:
             continue
 
+        # bbox=None is reported, not dropped -- consistent with how regex
+        # candidates from coordinate-less sources (pasted text, CSV) are
+        # already handled everywhere else in this contract. Silently
+        # skipping would under-report real PII that NER did find, just
+        # because the source had no page coordinates to attach it to.
         bbox = _bbox_for_span(spans, ent.start_char, ent.end_char)
-        if bbox is None:
-            continue  # no token overlaps this span, can't place it on the page
 
         candidate = {
             "pii_type": pii_type, "value": ent.text, "page_num": page["page_num"],

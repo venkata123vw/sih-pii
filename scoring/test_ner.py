@@ -59,4 +59,36 @@ assert ner.detect(NUMBERS_PAGE, "THIRD_PARTY_SERVICE", POLICY_MATRIX) == []
 EMPTY_PAGE = {"page_num": 0, "width": 1000, "height": 100, "tokens": [], "full_text": ""}
 assert ner.detect(EMPTY_PAGE, "THIRD_PARTY_SERVICE", POLICY_MATRIX) == []
 
+# --- Regression: pasted-text tokens carry no bbox/ocr_conf at all
+# (pipeline.py builds them as {"text": w} only). This used to crash with
+# KeyError: 'bbox' inside _bbox_for_span() the moment an entity overlapped
+# one of these tokens. Must now report the detection with bbox=None
+# rather than crash OR silently drop it -- dropping would under-report
+# real PII that NER did find, just because the source had no coordinates.
+PASTED_TEXT_PAGE = {
+    "page_num": 0, "width": 0, "height": 0,
+    "tokens": [{"text": w} for w in "Contact Ravi Kumar at Mumbai regarding Aadhaar 6563 2299 1528".split()],
+    "full_text": "Contact Ravi Kumar at Mumbai regarding Aadhaar 6563 2299 1528",
+}
+detections = ner.detect(PASTED_TEXT_PAGE, "THIRD_PARTY_SERVICE", POLICY_MATRIX)
+assert len(detections) == 2, detections   # NAME "Ravi Kumar" + ADDRESS "Mumbai"
+for d in detections:
+    assert d["bbox"] is None
+    assert d["confidence"] == 0.5   # bare NER hit, no other signal, at the ceiling
+
+# --- Mixed page: some tokens have bbox, some don't. Union must only use
+# the ones that do, not crash on the ones that don't.
+MIXED_PAGE = {
+    "page_num": 0, "width": 1000, "height": 100,
+    "tokens": [
+        {"text": "Name:"},  # no bbox -- e.g. a field pasted in without coordinates
+        {"text": "Ravi", "bbox": [65, 0, 100, 20], "ocr_conf": 0.9},
+        {"text": "Kumar", "bbox": [105, 0, 150, 20], "ocr_conf": 0.9},
+    ],
+    "full_text": "Name: Ravi Kumar",
+}
+detections = ner.detect(MIXED_PAGE, "THIRD_PARTY_SERVICE", POLICY_MATRIX)
+assert len(detections) == 1
+assert detections[0]["bbox"] == [65, 0, 150, 20]   # union of only the tokens that have one
+
 print("All ner tests passed")
