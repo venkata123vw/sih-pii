@@ -99,6 +99,36 @@ def is_card_number(number: str) -> bool:
 
 
 def mask_card(number: str) -> str:
-    """PCI-DSS: first 6 and last 4 are the maximum displayable."""
-    s = clean(number)
+    """
+    Safely mask a validated payment-card number.
+
+    PCI-DSS display rule used here:
+    - first 6 digits remain visible
+    - last 4 digits remain visible
+    - everything in between is masked
+
+    Safety requirements:
+    - accepts digits with common visual separators only
+    - requires 12-19 cleaned digits
+    - requires a recognized card network
+    - requires a valid Luhn checksum
+
+    Raises:
+        ValueError: if the input is not a valid card number.
+    """
+    raw = str(number)
+
+    # Do not silently discard arbitrary characters. Spaces, hyphens,
+    # and parentheses are allowed as normal card-number formatting.
+    if any(ch not in '0123456789 -()' for ch in raw):
+        raise ValueError("card number contains unsupported characters")
+
+    s = clean(raw)
+
+    if not 12 <= len(s) <= 19:
+        raise ValueError("card number must contain 12-19 digits")
+
+    if not is_card_number(s):
+        raise ValueError("card number failed network or Luhn validation")
+
     return s[:6] + '*' * (len(s) - 10) + s[-4:]

@@ -1,0 +1,130 @@
+{
+  "true_positives": 4,
+  "false_positives": 0,
+  "false_negatives": 0,
+  "precision": 1.0,
+  "recall": 1.0,
+  "f1": 1.0,
+  "cases": [
+    {
+      "name": "test_aadhaar_valid",
+      "expected": [
+        {
+          "pii_type": "AADHAAR",
+          "value": "2341 2341 2346"
+        }
+      ],
+      "predicted": [
+        {
+          "pii_type": "AADHAAR",
+          "value": "2341 2341 2346",
+          "page_num": 0,
+          "bbox": [
+            10,
+            100,
+            70,
+            120
+          ],
+          "checksum_valid": true,
+          "match_source": "regex",
+          "ocr_conf": 1.0
+        }
+      ],
+      "tp": 1,
+      "fp": 0,
+      "fn": 0
+    },
+    {
+      "name": "test_pan",
+      "expected": [
+        {
+          "pii_type": "PAN",
+          "value": "ALWPG5809L"
+        }
+      ],
+      "predicted": [
+        {
+          "pii_type": "PAN",
+          "value": "ALWPG5809L",
+          "page_num": 0,
+          "bbox": [
+            10,
+            100,
+            50,
+            120
+          ],
+          "checksum_valid": null,
+          "match_source": "regex",
+          "ocr_conf": 1.0
+        }
+      ],
+      "tp": 1,
+      "fp": 0,
+      "fn": 0
+    },
+    {
+      "name": "test_phone",
+      "expected": [
+        {
+          "pii_type": "PHONE",
+          "value": "9876543210"
+        }
+      ],
+      "predicted": [
+        {
+          "pii_type": "PHONE",
+          "value": "9876543210",
+          "page_num": 0,
+          "bbox": [
+            10,
+            100,
+            50,
+            120
+          ],
+          "checksum_valid": null,
+          "match_source": "regex",
+          "ocr_conf": 1.0
+        }
+      ],
+      "tp": 1,
+      "fp": 0,
+      "fn": 0
+    },
+    {
+      "name": "test_email",
+      "expected": [
+        {
+          "pii_type": "EMAIL",
+          "value": "test@example.com"
+        }
+      ],
+      "predicted": [
+        {
+          "pii_type": "EMAIL",
+          "value": "test@example.com",
+          "page_num": 0,
+          "bbox": [
+            10,
+            100,
+            50,
+            120
+          ],
+          "checksum_valid": null,
+          "match_source": "regex",
+          "ocr_conf": 1.0
+        }
+      ],
+      "tp": 1,
+      "fp": 0,
+      "fn": 0
+    },
+    {
+      "name": "test_clean",
+      "expected": [],
+      "predicted": [],
+      "tp": 0,
+      "fp": 0,
+      "fn": 0
+    }
+  ]
+}

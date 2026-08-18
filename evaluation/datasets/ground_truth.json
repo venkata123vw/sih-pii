@@ -1,0 +1,37 @@
+{
+  "test_aadhaar_valid": {
+    "pii": [
+      {
+        "pii_type": "AADHAAR",
+        "value": "491417776310"
+      }
+    ]
+  },
+  "test_pan": {
+    "pii": [
+      {
+        "pii_type": "PAN",
+        "value": "ALWPG5809L"
+      }
+    ]
+  },
+  "test_phone": {
+    "pii": [
+      {
+        "pii_type": "PHONE",
+        "value": "9876543210"
+      }
+    ]
+  },
+  "test_email": {
+    "pii": [
+      {
+        "pii_type": "EMAIL",
+        "value": "test@example.com"
+      }
+    ]
+  },
+  "test_clean": {
+    "pii": []
+  }
+}

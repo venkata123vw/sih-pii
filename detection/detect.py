@@ -8,9 +8,11 @@ because OCR splits "2341 2341 2346" into three tokens.
 
 Contract: consumes P2's extraction output, emits P1 -> P3 candidates.
 """
+
 from detection.verhoeff import validate_aadhaar
 from detection.luhn import is_card_number
 import re
+
 
 # ---------------------------------------------------------------------
 # Pattern registry. Adding a PII type = adding a dict entry, no engine
@@ -21,8 +23,8 @@ import re
 #   validator:        None = format-only, so checksum_valid stays None
 #   priority:         higher wins when two types claim overlapping spans
 #   corroboration:    optional. For types whose bare form is genuinely
-#                     ambiguous with ordinary document noise. The candidate
-#                     is kept if ANY listed signal fires:
+#                     ambiguous with ordinary document noise.
+#                     The candidate is kept if ANY listed signal fires:
 #                       self_evident — regex on the normalised string that
 #                                      only a real identifier would match
 #                                      (e.g. an explicit +91 / 0 prefix)
@@ -51,6 +53,43 @@ REGISTRY = {
         # checks to P3 as confidence signals rather than gates.
         validator=None,
         strip=' -'),
+
+    # -----------------------------------------------------------------
+    # Driving Licence
+    #
+    # The project fixture uses the synthetic format:
+    #
+    #     DL-SYN-2026-45821
+    #
+    # After normalization:
+    #
+    #     DLSYN202645821
+    #
+    # This is 5 letters followed by 9 digits.
+    #
+    # The format alone is deliberately not enough to classify a value
+    # as a driving licence because identifiers with similar structure
+    # can occur in ordinary documents. Require driving-licence context.
+    #
+    # There is no checksum to validate for this synthetic project
+    # format, so checksum_valid remains None.
+    # -----------------------------------------------------------------
+    'DL': dict(
+        window=4,
+        priority=70,
+        pattern=re.compile(r'^[A-Z]{5}\d{9}$'),
+        corroboration=dict(
+            keywords=(
+                'dl no',
+                'driving licence',
+                'driving license',
+                'licence number',
+                'license number',
+            ),
+        ),
+        validator=None,
+        strip=' -'),
+
     # EPIC really is AAA9999999 — identical in shape to courier tracking
     # and reference codes (measured: 20% FP). The string alone cannot
     # distinguish them, so require a keyword in the page text.
@@ -61,56 +100,84 @@ REGISTRY = {
         corroboration=dict(
             keywords=('voter', 'epic', 'election', 'elector'),
         ),
-        validator=None, strip=' -'),
+        validator=None,
+        strip=' -'),
+
     'PASSPORT': dict(
         window=2, priority=60,
         pattern=re.compile(r'^[A-PR-WY][1-9]\d{6}$'),
-        validator=None, strip=' -'),
+        validator=None,
+        strip=' -'),
+
     # A bare 10-digit run starting 6-9 is a rupee amount as often as a
     # phone number (measured: 10% FP on realistic invoice strings). So a
     # bare form needs corroboration; a prefixed or grouped one does not.
     'PHONE': dict(
-        window=3, priority=40,
+        window=3,
+        priority=40,
         pattern=re.compile(r'^(?:(?:\+?91)|0)?[6-9]\d{9}$'),
         corroboration=dict(
-            # 11+ chars means a real +91 / 91 / 0 prefix is present. Length
-            # is the test, NOT leading digits: '9198765432' is a bare
-            # 10-digit number that merely starts 9,1 — not a +91 prefix.
+            # 11+ chars means a real +91 / 91 / 0 prefix is present.
+            # Length is the test, NOT leading digits: '9198765432' is a
+            # bare 10-digit number that merely starts 9,1 — not a +91 prefix.
             self_evident=re.compile(r'^(?:\+?91|0)[6-9]\d{9}$'),
-            keywords=('phone', 'mobile', 'mob', 'contact', 'tel',
-                      'cell', 'whatsapp', 'landline'),
+            keywords=(
+                'phone',
+                'mobile',
+                'mob',
+                'contact',
+                'tel',
+                'cell',
+                'whatsapp',
+                'landline',
+            ),
         ),
-        validator=None, strip=' -()'),
+        validator=None,
+        strip=' -()'),
+
     'EMAIL': dict(
-        window=1, priority=50,
+        window=1,
+        priority=50,
         pattern=re.compile(r'^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$'),
-        validator=None, strip=''),
+        validator=None,
+        strip=''),
 }
 
 
 def _union_bbox(tokens):
     """Union box across a token run. None-safe for CSV/field sources."""
     boxes = [t['bbox'] for t in tokens if t.get('bbox')]
+
     if not boxes:
         return None
-    return [min(b[0] for b in boxes), min(b[1] for b in boxes),
-            max(b[2] for b in boxes), max(b[3] for b in boxes)]
+
+    return [
+        min(b[0] for b in boxes),
+        min(b[1] for b in boxes),
+        max(b[2] for b in boxes),
+        max(b[3] for b in boxes),
+    ]
 
 
 def _corroborated(spec, raw, norm, page_text):
     """
-    True if this candidate may be kept. Types with no `corroboration` key
-    are unconditionally kept — their checksum already does the work.
+    True if this candidate may be kept.
+
+    Types with no `corroboration` key are unconditionally kept —
+    their checksum or format is sufficient.
     """
     rules = spec.get('corroboration')
+
     if not rules:
         return True
 
     self_evident = rules.get('self_evident')
+
     if self_evident and self_evident.match(norm):
         return True
 
     keywords = rules.get('keywords')
+
     if keywords and any(
         re.search(r'\b' + re.escape(k) + r'\b', page_text)
         for k in keywords
@@ -121,35 +188,51 @@ def _corroborated(spec, raw, norm, page_text):
 
 
 def _normalise(raw, strip_chars):
+    """Remove configured separators and normalize to uppercase."""
     for ch in strip_chars:
         raw = raw.replace(ch, '')
+
     return raw.upper()
 
 
 def _scan_page(page, doc_id):
+    """Scan one extracted page for all registered PII types."""
     tokens = page.get('tokens', [])
     page_text = (page.get('full_text') or '').lower()
     hits = []
+
     for pii_type, spec in REGISTRY.items():
         for start in range(len(tokens)):
             for length in range(1, spec['window'] + 1):
                 run = tokens[start:start + length]
+
                 if len(run) < length:
                     break
+
                 raw = ' '.join(t['text'] for t in run)
                 norm = _normalise(raw, spec['strip'])
+
                 if not spec['pattern'].match(norm):
                     continue
+
                 if not _corroborated(spec, raw, norm, page_text):
-                    continue          # ambiguous bare form, nothing backs it
+                    continue
+
                 validator = spec['validator']
+
                 if validator is None:
                     checksum_valid = None
                 else:
                     if not validator(norm):
-                        continue          # pattern matched, checksum failed
+                        continue
+
                     checksum_valid = True
-                confs = [t.get('ocr_conf', 1.0) for t in run]
+
+                confs = [
+                    t.get('ocr_conf', 1.0)
+                    for t in run
+                ]
+
                 hits.append({
                     'pii_type': pii_type,
                     'value': raw,
@@ -161,6 +244,7 @@ def _scan_page(page, doc_id):
                     '_span': (start, start + length),
                     '_priority': spec['priority'],
                 })
+
     return hits
 
 
@@ -188,14 +272,19 @@ def _resolve_overlaps(hits):
             -(h['_span'][1] - h['_span'][0]),
             -h['_priority'],
             h['_span'][0],
-        )
+        ),
     )
+
     kept = []
+
     for h in ordered:
         s, e = h['_span']
 
         overlaps = any(
-            not (e <= k['_span'][0] or s >= k['_span'][1])
+            not (
+                e <= k['_span'][0]
+                or s >= k['_span'][1]
+            )
             for k in kept
         )
 
@@ -207,6 +296,7 @@ def _resolve_overlaps(hits):
     for h in kept:
         h.pop('_span')
         h.pop('_priority')
+
     return kept
 
 
@@ -214,6 +304,15 @@ def detect(extraction) -> dict:
     """extraction = P2's output dict. Returns the P1 -> P3 contract."""
     doc_id = extraction['doc_id']
     candidates = []
+
     for page in extraction.get('pages', []):
-        candidates.extend(_resolve_overlaps(_scan_page(page, doc_id)))
-    return {'doc_id': doc_id, 'candidates': candidates}
+        candidates.extend(
+            _resolve_overlaps(
+                _scan_page(page, doc_id)
+            )
+        )
+
+    return {
+        'doc_id': doc_id,
+        'candidates': candidates,
+    }

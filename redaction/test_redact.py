@@ -21,7 +21,7 @@ INPUT_PDF = "testdata/documents/test.pdf"
 # is surgical: the box removed the value without swallowing the line's label.
 SURVIVING_LABEL = "Aadhaar:"
 
-AADHAAR = "1234 5678 9012"
+AADHAAR = "2341 2341 2346"
 NAME = "Rithika"
 EMAIL = "rithika@example.com"
 
@@ -53,8 +53,8 @@ def _decisions(*detections):
     }
 
 
-AADHAAR_BOX = [124.03, 157.10, 210.77, 173.59]
-NAME_BOX = [110.68, 127.10, 147.35, 143.59]
+AADHAAR_BOX = [186.71998596191406, 128.5, 331.2799377441406, 155.97999572753906]
+NAME_BOX = [164.45999145507812, 178.5, 225.57998657226562, 205.97999572753906]
 EMAIL_BOX = [108.67, 187.10, 224.21, 203.59]
 
 DECISIONS = _decisions(
@@ -158,7 +158,7 @@ def test_mask_leaves_tail_visible(tmp_path):
 
     text = _extract_text(out_path)
     assert AADHAAR not in text
-    assert "XXXX XXXX 9012" in text
+    assert "XXXX XXXX 2346" in text
 
 
 def test_flag_fails_closed_by_default(tmp_path):
@@ -285,7 +285,7 @@ def test_rotated_page_redaction(tmp_path):
 @pytest.mark.parametrize(
     "value,expected",
     [
-        ("1234 5678 9012", "XXXX XXXX 9012"),
+        ("2341 2341 2346", "XXXX XXXX 2346"),
         ("ABCDE1234F", "XXXXXX234F"),
         ("4111-1111-1111-1111", "XXXX-XXXX-XXXX-1111"),
     ],

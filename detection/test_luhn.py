@@ -1,3 +1,5 @@
+import pytest
+
 from detection.luhn import (
     luhn_validate,
     luhn_generate_check_digit,
@@ -5,7 +7,6 @@ from detection.luhn import (
     is_card_number,
     mask_card,
 )
-
 
 def test_luhn_length_bounds():
     """ISO/IEC 7812 valid range is 12-19 digits."""
@@ -53,3 +54,42 @@ def test_is_card_number_requires_prefix_and_luhn():
 def test_mask_card_pci_dss():
     """PCI-DSS: first 6 and last 4 are the maximum displayable."""
     assert mask_card('4242424242424242') == '424242******4242'
+
+def test_mask_card_rejects_invalid_luhn():
+    """mask_card() must never mask an invalid card as if it were valid."""
+    with pytest.raises(ValueError):
+        mask_card('4242424242424243')
+
+
+def test_mask_card_rejects_unknown_network():
+    """A Luhn-valid number without a recognized network must be rejected."""
+    with pytest.raises(ValueError):
+        mask_card('1234567890123456')
+
+
+def test_mask_card_rejects_wrong_length():
+    """mask_card() must enforce the ISO/IEC 7812 length bounds."""
+    with pytest.raises(ValueError):
+        mask_card('424242424242')
+
+
+def test_mask_card_rejects_unsupported_characters():
+    """Arbitrary characters must not be silently stripped before masking."""
+    with pytest.raises(ValueError):
+        mask_card('4242424242424242abc')
+
+
+def test_mask_card_accepts_common_formatting():
+    """Normal card formatting should still be accepted."""
+    assert mask_card('4242-4242-4242-4242') == '424242******4242'
+    assert mask_card('4242 4242 4242 4242') == '424242******4242'
+
+
+def test_mask_card_never_returns_full_number():
+    """The full card number must never appear in the masked result."""
+    number = '4242424242424242'
+    masked = mask_card(number)
+
+    assert masked != number
+    assert number not in masked
+    assert masked == '424242******4242'
