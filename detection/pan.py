@@ -1,19 +1,23 @@
 """
-Indian PAN (Permanent Account Number) structural validation.
+Indian PAN structural validation.
+Format: AAAAA9999A — 5 letters, 4 digits, 1 letter. s.139A, Income-tax Act 1961.
 
-Format: AAAAA9999A  — 5 letters, 4 digits, 1 letter.
-Issued under s.139A of the Income-tax Act, 1961.
+PAN has NO usable checksum. The 10th character is a check digit by design
+but the algorithm is not published by ITD, NSDL, or UTIITSL.
 
-IMPORTANT: PAN has NO usable checksum. The 10th character is a check
-digit by design, but the algorithm is not published by ITD, NSDL, or
-UTIITSL. Validation is format + entity code only. Do not claim
-checksum validation for PAN.
+DESIGN NOTE: validate_pan() is FORMAT ONLY, deliberately permissive.
+The entity code at position 4 and the non-zero serial are returned as
+SIGNALS via pan_signals(), not enforced as gates. Reason: this is a
+detection engine. A false negative is unredacted PII in a shipped
+document. A false positive is a checkbox the user unticks in review.
+Those costs are not symmetric, so we bias toward recall and let the
+confidence layer (P3) weigh the signals.
 """
-
 import re
 
-# Official Income Tax Department entity codes (position 4). Exactly 10.
-# Note: 'E' (LLP) and 'K' (Trust) are NOT valid — LLPs use F, Trusts use T.
+# Widely-documented ITD entity codes (position 4). Treated as a
+# confidence signal, not a whitelist — sources disagree on whether
+# 'E' (LLP) and 'K' are issued.
 ENTITY_TYPES = {
     'A': 'Association of Persons (AOP)',
     'B': 'Body of Individuals (BOI)',
@@ -31,21 +35,32 @@ _PAN_RE = re.compile(r'^[A-Z]{5}[0-9]{4}[A-Z]$')
 
 
 def validate_pan(pan: str) -> bool:
-    p = str(pan).strip().upper()
-    if not _PAN_RE.match(p):
-        return False
-    if p[3] not in ENTITY_TYPES:
-        return False
-    if p[5:9] == '0000':            # serial 0000 is never issued
-        return False
-    return True
+    """Format only. Permissive by design — see module docstring."""
+    return bool(_PAN_RE.match(str(pan).strip().upper()))
 
 
-def pan_entity_type(pan: str) -> str | None:
+def pan_signals(pan: str) -> dict:
+    """Signals for P3's confidence function. All False if format fails."""
     p = str(pan).strip().upper()
-    return ENTITY_TYPES.get(p[3]) if validate_pan(p) else None
+    if not validate_pan(p):
+        return {'format_ok': False, 'known_entity_code': False,
+                'serial_nonzero': False, 'entity_type': None}
+    return {
+        'format_ok': True,
+        'known_entity_code': p[3] in ENTITY_TYPES,
+        'serial_nonzero': p[5:9] != '0000',
+        'entity_type': ENTITY_TYPES.get(p[3]),
+    }
+
+
+def pan_entity_type(pan: str):
+    return pan_signals(pan)['entity_type']
 
 
 def mask_pan(pan: str, reveal_last: int = 4) -> str:
     p = str(pan).strip().upper()
-    return 'X' * (10 - reveal_last) + p[-reveal_last:]
+    if not _PAN_RE.match(p):
+        raise ValueError('PAN must match AAAAA9999A')
+    if not 0 <= reveal_last <= 4:
+        raise ValueError('reveal_last must be between 0 and 4')
+    return 'X' * (10 - reveal_last) + (p[-reveal_last:] if reveal_last else '')

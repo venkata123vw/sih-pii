@@ -1,18 +1,7 @@
-defusedxml==0.7.1
-Faker==40.36.0
-fonttools==4.63.0
-fpdf2==2.8.8
-lxml==6.1.1
-numpy==2.5.2
-pandas==3.0.5
-pillow==12.3.0
-pymupdf==1.28.2
-python-dateutil==2.9.0.post0
-python-docx==1.2.0
-PyYAML==6.0.3
-six==1.17.0
-spacy==3.8.13
+pymupdf
+pyyaml
+pytest
+easyocr
+spacy
 # en_core_web_sm isn't a pip package -- after installing requirements, also run:
 #   python -m spacy download en_core_web_sm
-typing_extensions==4.16.0
-tzdata==2026.3

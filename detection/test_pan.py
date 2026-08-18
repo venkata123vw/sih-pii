@@ -1,32 +1,57 @@
-from pan import validate_pan, pan_entity_type, mask_pan
+import pytest
 
-# ITD's own published example
-assert validate_pan('ALWPG5809L') is True
-assert pan_entity_type('ALWPG5809L') == 'Individual'
+from detection.pan import (
+    validate_pan,
+    pan_signals,
+    pan_entity_type,
+    mask_pan,
+)
 
-# Valid entity codes
-assert validate_pan('ABCCD1234E') is True      # C = Company
-assert validate_pan('ABCFD1234E') is True      # F = Firm/LLP
-assert validate_pan('ABCTD1234E') is True      # T = Trust
-assert validate_pan('ABCHD1234E') is True      # H = HUF
 
-# Invalid entity codes — these are the common wrong ones
-assert validate_pan('ABCED1234E') is False     # E is NOT valid (LLP uses F)
-assert validate_pan('ABCKD1234E') is False     # K is NOT valid (Trust uses T)
-assert validate_pan('ABCXD1234E') is False     # X not an entity code
+def test_itd_published_example():
+    assert validate_pan('ALWPG5809L') is True
+    assert pan_entity_type('ALWPG5809L') == 'Individual'
 
-# Format failures
-assert validate_pan('ABC1D1234E') is False     # digit in letter zone
-assert validate_pan('ABCPD12345') is False     # digit in final position
-assert validate_pan('ABCPD123E') is False      # too short
-assert validate_pan('ABCPD00001') is False     # wait - check this one
 
-# Serial check
-assert validate_pan('ABCPD0000E') is False     # serial 0000 invalid
+def test_known_entity_codes():
+    for p in ('ABCCD1234E', 'ABCFD1234E', 'ABCTD1234E', 'ABCHD1234E'):
+        assert validate_pan(p) is True
+        assert pan_signals(p)['known_entity_code'] is True
 
-# Case tolerance
-assert validate_pan('alwpg5809l') is True
 
-assert mask_pan('ALWPG5809L') == 'XXXXXX809L'
+def test_unknown_entity_codes_are_detected_not_rejected():
+    """
+    Deliberate recall bias. E and K are contested in public sources, and
+    a detection engine that rejects them ships unredacted PII. They are
+    detected and flagged low-signal for the scoring layer instead.
+    """
+    for p in ('ABCED1234E', 'ABCKD1234E', 'ABCXD1234E'):
+        assert validate_pan(p) is True
+        assert pan_signals(p)['known_entity_code'] is False
 
-print('All PAN tests passed')
+
+def test_zero_serial_is_a_signal_not_a_gate():
+    assert validate_pan('ABCPD0000E') is True
+    assert pan_signals('ABCPD0000E')['serial_nonzero'] is False
+    assert pan_signals('ALWPG5809L')['serial_nonzero'] is True
+
+
+def test_format_failures_still_fail():
+    for p in ('ABC1D1234E', 'ABCPD12345', 'ABCPD123E', 'ABCPD1234EX', ''):
+        assert validate_pan(p) is False
+        assert pan_signals(p)['format_ok'] is False
+
+
+def test_case_tolerance():
+    assert validate_pan('alwpg5809l') is True
+
+
+def test_mask_pan():
+    assert mask_pan('ALWPG5809L') == 'XXXXXX809L'
+    assert mask_pan('ALWPG5809L', reveal_last=0) == 'XXXXXXXXXX'
+
+
+def test_mask_pan_cannot_leak_full_number():
+    for bad in (5, 10, -1):
+        with pytest.raises(ValueError):
+            mask_pan('ALWPG5809L', reveal_last=bad)

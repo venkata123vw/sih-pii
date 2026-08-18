@@ -2,4 +2,7 @@ __pycache__/
 *.pyc
 .venv/
 venv/
-.env
+.pytest_cache/
+testdata/documents/redacted.pdf
+*_redacted.pdf
+testdata/documents/out.pdf
