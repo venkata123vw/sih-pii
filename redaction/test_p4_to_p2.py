@@ -1,46 +1,104 @@
-from redact import apply_redactions
+"""
+Real P2 -> P1 -> P3 -> P4 integration test.
+
+P4 consumes the actual return value of scoring.score.score()
+verbatim. No simulated detection dictionary is used.
+"""
+
 import pymupdf
+
+from ingestion.extract import extract
+from detection.detect import detect
+from scoring.score import score
+from redact import apply_redactions
 
 
 INPUT_PDF = "testdata/documents/test.pdf"
 OUTPUT_PDF = "testdata/documents/integration_redacted.pdf"
 
 
-def test_p4_to_p2_contract():
+def test_real_p3_to_p4_contract():
 
-    # Simulated P4 output
-    p4_output = {
-        "detections": [
-            {
-                "page_num": 0,
-                "bbox": [186.0, 177.0, 332.0, 207.0],
-                "text": "1234 5678 9012",
-            }
-        ]
-    }
+    # P2: real extraction
+    extraction = extract(INPUT_PDF)
 
-    # P2 consumes P4 output
-    result = apply_redactions(
+    assert extraction["doc_id"]
+    assert extraction["pages"]
+
+    # P1: real detection
+    candidates = detect(extraction)
+
+    assert candidates["doc_id"] == extraction["doc_id"]
+    assert "candidates" in candidates
+
+    print("\nREAL P1 DETECTION OUTPUT:")
+    for candidate in candidates["candidates"]:
+        print(
+            candidate["pii_type"],
+            candidate["value"],
+            candidate["page_num"],
+            candidate["bbox"],
+            candidate["checksum_valid"],
+            candidate["match_source"],
+        )
+
+    # P3: real scoring
+    scored = score(
+        candidates,
+        profile="THIRD_PARTY_SERVICE",
+        page_ctx=extraction,
+    )
+
+    assert scored["doc_id"] == extraction["doc_id"]
+    assert scored["context_profile"] == "THIRD_PARTY_SERVICE"
+    assert "detections" in scored
+    assert "excess_pii_alert" in scored
+
+    print("\nREAL P3 SCORE OUTPUT:")
+    for detection in scored["detections"]:
+        print(
+            detection["pii_type"],
+            detection["value"],
+            detection["page_num"],
+            detection["bbox"],
+            detection["policy_action"],
+            detection["confidence"],
+        )
+
+    # Confirm the valid Aadhaar reached P3.
+    aadhaar = "2341 2341 2346"
+
+    aadhaar_detections = [
+        d for d in scored["detections"]
+        if d["value"] == aadhaar
+    ]
+
+    assert aadhaar_detections, (
+        "Valid Aadhaar was not detected/scored. "
+        "This is a P1/P2 issue, not a P4 redaction issue."
+    )
+
+    # P4 consumes the REAL P3 output verbatim.
+    manifest = apply_redactions(
         INPUT_PDF,
-        p4_output,
+        scored,
         OUTPUT_PDF,
     )
 
-    assert result == OUTPUT_PDF
+    assert manifest["verified"] is True
+    assert manifest["doc_id"] == scored["doc_id"]
 
-    # Verify the PII is gone
+    # Verify resulting PDF.
     doc = pymupdf.open(OUTPUT_PDF)
+    try:
+        text = "".join(page.get_text() for page in doc)
+    finally:
+        doc.close()
 
-    text = ""
-    for page in doc:
-        text += page.get_text()
+    assert aadhaar not in text
 
-    doc.close()
-
-    assert "1234 5678 9012" not in text
-
-    # Non-PII should remain
+    # Non-PII should remain.
     assert "Rithika" in text
     assert "rithika@example.com" in text
 
-    print("PASS: P4 -> P2 contract integration works.")
+    print("\nPASS: real P2 -> P1 -> P3 -> P4 integration works.")
