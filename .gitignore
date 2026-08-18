@@ -6,3 +6,4 @@ venv/
 testdata/documents/redacted.pdf
 *_redacted.pdf
 testdata/documents/out.pdf
+testdata/documents/scanned_test.pdf
