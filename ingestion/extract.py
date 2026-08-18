@@ -237,7 +237,14 @@ def extract(filepath: str, reader=None) -> dict:
 
     if needs_ocr and reader is None:
         import easyocr
-        reader = easyocr.Reader(["en"], gpu=False)
+        # Indian government IDs (Aadhaar, PAN, ...) are bilingual by
+        # design -- Hindi (Devanagari) alongside English on the same
+        # card. An English-only reader forces Devanagari glyphs into
+        # English character predictions, producing garbled tokens that
+        # then feed bad text into NER. "hi" is EasyOCR's supported
+        # Devanagari-script code and combines with "en" (confirmed:
+        # both share EasyOCR's Latin+Devanagari-compatible model group).
+        reader = easyocr.Reader(["en", "hi"], gpu=False)
 
     for page_num, page in enumerate(doc):
         rect = page.rect
