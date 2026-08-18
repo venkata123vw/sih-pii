@@ -14,6 +14,10 @@ WEIGHT_CHECKSUM_INVALID = -0.5
 WEIGHT_KEYWORD_MATCH = 0.25
 WEIGHT_DOC_TYPE_BOOST = 0.1
 WEIGHT_NEGATIVE_SIGNAL = -0.3
+# Stronger than a generic negative signal: "vid" directly labeling this
+# specific match is close to structural proof it's the VID field, not a
+# second Aadhaar number -- see context.vid_adjacent().
+WEIGHT_VID_ADJACENT = -0.4
 OCR_CONF_DAMPEN_THRESHOLD = 0.7
 NER_CONFIDENCE_CEILING = 0.5
 
@@ -51,6 +55,9 @@ def score(candidate: dict, page_context: dict) -> float:
 
     if signals["negative_match"]:
         total += WEIGHT_NEGATIVE_SIGNAL
+
+    if signals["vid_adjacent"]:
+        total += WEIGHT_VID_ADJACENT
 
     pan = _pan_signals_for(candidate)
     if pan is not None:
@@ -95,6 +102,9 @@ def signal_reasons(candidate: dict, page_context: dict) -> list[str]:
 
     if signals["negative_match"]:
         reasons.append(f"negative_signal:{signals['negative_keyword']}")
+
+    if signals["vid_adjacent"]:
+        reasons.append("vid_adjacent")
 
     pan = _pan_signals_for(candidate)
     if pan is not None:

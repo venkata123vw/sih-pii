@@ -20,6 +20,20 @@ NEGATIVE_KEYWORDS = [
     "quantity", "amount", "sku", "tracking", "identifier",
 ]
 
+# Aadhaar's 16-digit VID (Virtual ID) is printed right next to the real
+# 12-digit number on every card. A sliding-window join can pick out a
+# 12-digit substring of the VID that happens to pass the Aadhaar regex
+# and, occasionally, its checksum too (a single check digit doesn't
+# reject 100% of arbitrary strings). This can't be a generic
+# NEGATIVE_KEYWORDS entry: the real Aadhaar number and the VID sit close
+# together in real card layouts, both well within the ±WINDOW_CHARS
+# radius used by negative_signal() -- a symmetric window can't tell them
+# apart and would end up penalizing the real number too. This is a
+# tighter, backward-only check instead: only true if "vid" is the label
+# directly attached to *this* match (immediately before it), not just
+# present somewhere in the general neighborhood.
+VID_LABEL_GAP = 15
+
 DOC_TYPE_KEYWORDS = [
     "government of india", "uidai", "income tax department", "ministry of",
 ]
@@ -70,6 +84,17 @@ def doc_type_boost(full_text: str) -> bool:
     return any(kw in lowered for kw in DOC_TYPE_KEYWORDS)
 
 
+def vid_adjacent(full_text: str, value: str) -> bool:
+    """True if 'vid' is the label immediately preceding this AADHAAR
+    match -- see VID_LABEL_GAP above for why this has to be a narrow,
+    backward-only check rather than a NEGATIVE_KEYWORDS entry."""
+    idx = _locate(full_text, value)
+    if idx == -1:
+        return False
+    preceding = full_text[max(0, idx - VID_LABEL_GAP):idx].lower()
+    return "vid" in preceding
+
+
 def _bbox_overlap(a: list, b: list) -> bool:
     ax0, ay0, ax1, ay1 = a
     bx0, by0, bx1, by1 = b
@@ -107,6 +132,10 @@ def get_signals(candidate: dict, page_ctx: dict) -> dict:
 
     kw_match, kw = keyword_proximity(full_text, candidate["value"], candidate["pii_type"])
     neg_match, neg_kw = negative_signal(full_text, candidate["value"])
+    vid_match = (
+        candidate["pii_type"] == "AADHAAR"
+        and vid_adjacent(full_text, candidate["value"])
+    )
 
     # detect.py puts its own ocr_conf on the candidate (min across the
     # joined tokens that produced it) -- more precise than reconstructing
@@ -122,5 +151,6 @@ def get_signals(candidate: dict, page_ctx: dict) -> dict:
         "negative_match": neg_match,
         "negative_keyword": neg_kw,
         "doc_type_boost": doc_type_boost(full_text),
+        "vid_adjacent": vid_match,
         "ocr_conf": ocr_conf,
     }

@@ -108,4 +108,48 @@ assert "ocr_conf" not in AADHAAR_CANDIDATE
 signals = context.get_signals(AADHAAR_CANDIDATE, AADHAAR_CTX)
 assert abs(signals["ocr_conf"] - (0.95 + 0.95 + 0.55) / 3) < 1e-9
 
+# --- vid_adjacent: Aadhaar's VID (Virtual ID) field is a 16-digit run
+# printed right next to the real 12-digit number on every card. A
+# sliding-window join can pick a 12-digit substring of the VID that
+# passes the Aadhaar regex (and, rarely, its checksum too). Values here
+# mirror an actual observed false positive: real Aadhaar "2341 2341
+# 2346", VID "9111 8122 7978 3936" -- the tail "8122 7978 3936" got
+# matched as a second AADHAAR candidate.
+VID_PAGE = {
+    "page_num": 0, "width": 1240, "height": 1754, "tokens": [],
+    "full_text": "Aadhaar 2341 2341 2346\nVID : 9111 8122 7978 3936",
+}
+VID_CTX = {"doc_id": "d4", "pages": [VID_PAGE]}
+REAL_AADHAAR_CANDIDATE = {
+    "pii_type": "AADHAAR", "value": "2341 2341 2346", "page_num": 0,
+    "bbox": [0, 0, 1, 1], "checksum_valid": True, "match_source": "regex",
+}
+VID_SUBSTRING_CANDIDATE = {
+    "pii_type": "AADHAAR", "value": "8122 7978 3936", "page_num": 0,
+    "bbox": [0, 0, 1, 1], "checksum_valid": True, "match_source": "regex",
+}
+
+# The real Aadhaar number is NOT penalized -- "vid" is 34 chars away,
+# well outside VID_LABEL_GAP, even though it's within the generic
+# ±WINDOW_CHARS=50 negative_signal() window (proving a symmetric window
+# genuinely can't tell these two matches apart -- this had to be a
+# narrower, backward-only check).
+assert context.vid_adjacent(VID_PAGE["full_text"], REAL_AADHAAR_CANDIDATE["value"]) is False
+signals = context.get_signals(REAL_AADHAAR_CANDIDATE, VID_CTX)
+assert signals["vid_adjacent"] is False
+
+# The VID substring IS flagged -- "VID :" directly precedes it
+assert context.vid_adjacent(VID_PAGE["full_text"], VID_SUBSTRING_CANDIDATE["value"]) is True
+signals = context.get_signals(VID_SUBSTRING_CANDIDATE, VID_CTX)
+assert signals["vid_adjacent"] is True
+
+# Only applies to AADHAAR -- an unrelated pii_type sitting right after a
+# "vid" label isn't automatically suspect.
+NON_AADHAAR_CANDIDATE = {**VID_SUBSTRING_CANDIDATE, "pii_type": "CREDIT_CARD"}
+signals = context.get_signals(NON_AADHAAR_CANDIDATE, VID_CTX)
+assert signals["vid_adjacent"] is False
+
+# vid_adjacent: no match at all -> False, not a crash
+assert context.vid_adjacent(VID_PAGE["full_text"], "0000 0000 0000") is False
+
 print("All context tests passed")

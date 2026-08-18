@@ -126,4 +126,36 @@ assert "pan_unknown_entity_code" in reasons and "pan_zero_serial" in reasons
 # Non-PAN candidates are never touched by the PAN signal path
 assert "pan_unknown_entity_code" not in confidence.signal_reasons(AADHAAR_CANDIDATE, AADHAAR_CTX)
 
+# --- VID (Virtual ID) false positive: a 12-digit substring of Aadhaar's
+# 16-digit VID field can pass the AADHAAR regex+checksum (see
+# context.vid_adjacent()'s docstring). Confirms the fix actually
+# separates the real number's score from the VID substring's, not just
+# that the signal fires -- reproduces an observed real-world false
+# positive on an actual Aadhaar card scan.
+VID_PAGE = {
+    "page_num": 0, "width": 1240, "height": 1754, "tokens": [],
+    "full_text": "Aadhaar 2341 2341 2346\nVID : 9111 8122 7978 3936",
+}
+VID_CTX = {"doc_id": "d4", "pages": [VID_PAGE]}
+REAL_AADHAAR_CANDIDATE = {
+    "pii_type": "AADHAAR", "value": "2341 2341 2346", "page_num": 0,
+    "bbox": [0, 0, 1, 1], "checksum_valid": True, "match_source": "regex",
+}
+VID_SUBSTRING_CANDIDATE = {
+    "pii_type": "AADHAAR", "value": "8122 7978 3936", "page_num": 0,
+    "bbox": [0, 0, 1, 1], "checksum_valid": True, "match_source": "regex",
+}
+
+# real number: checksum(+0.4) + keyword(+0.25), no vid_adjacent penalty
+real_score = confidence.score(REAL_AADHAAR_CANDIDATE, VID_CTX)
+assert abs(real_score - 0.65) < 1e-9
+
+# VID substring: checksum(+0.4) + keyword(+0.25) - vid_adjacent(-0.4)
+vid_score = confidence.score(VID_SUBSTRING_CANDIDATE, VID_CTX)
+assert abs(vid_score - 0.25) < 1e-9
+
+assert vid_score < real_score
+assert "vid_adjacent" in confidence.signal_reasons(VID_SUBSTRING_CANDIDATE, VID_CTX)
+assert "vid_adjacent" not in confidence.signal_reasons(REAL_AADHAAR_CANDIDATE, VID_CTX)
+
 print("All confidence tests passed")

@@ -77,4 +77,32 @@ for text in [
     for detection in result["detections"]:
         assert detection["bbox"] is None   # coordinate-less source -> stays None, never invented
 
+# --- End-to-end VID false-positive regression (real detect() + score(),
+# not hand-built candidates): reproduces an observed real-world false
+# positive on a scanned Aadhaar card, where the VID (Virtual ID) field's
+# tail digits got matched as a second AADHAAR candidate.
+def _tok(text, i):
+    return {"text": text, "bbox": [10 * i, 100, 10 * i + 40, 120], "ocr_conf": 1.0}
+
+
+vid_words = ["Aadhaar", "2341", "2341", "2346", "VID", ":", "9111", "8122", "7978", "3936"]
+vid_page = {
+    "page_num": 0, "width": 1240, "height": 1754,
+    "tokens": [_tok(w, i) for i, w in enumerate(vid_words)],
+    "full_text": "Aadhaar 2341 2341 2346 VID : 9111 8122 7978 3936",
+}
+vid_extraction = {"doc_id": "vid-doc", "source_type": "scanned_image", "pages": [vid_page]}
+
+vid_candidates = detect(vid_extraction)
+# detection stays recall-biased -- both are still emitted as candidates,
+# not suppressed here (see detection.pan's docstring for why the project
+# favors recall over precision at this layer)
+assert {c["value"] for c in vid_candidates["candidates"]} == {"2341 2341 2346", "8122 7978 3936"}
+
+vid_result = score(vid_candidates, "THIRD_PARTY_SERVICE", vid_extraction)
+by_value = {d["value"]: d for d in vid_result["detections"] if d["pii_type"] == "AADHAAR"}
+assert by_value["2341 2341 2346"]["confidence"] > by_value["8122 7978 3936"]["confidence"]
+assert "vid_adjacent" in by_value["8122 7978 3936"]["reasons"]
+assert "vid_adjacent" not in by_value["2341 2341 2346"]["reasons"]
+
 print("All score wiring tests passed")
