@@ -10,7 +10,6 @@ Contract: consumes P2's extraction output, emits P1 -> P3 candidates.
 """
 from detection.verhoeff import validate_aadhaar
 from detection.luhn import is_card_number
-from detection.pan import validate_pan
 import re
 
 # ---------------------------------------------------------------------
@@ -36,11 +35,12 @@ REGISTRY = {
     'PAN': dict(
         window=2, priority=88,
         pattern=re.compile(r'^[A-Z]{5}\d{4}[A-Z]$'),
-        validator=validate_pan,
+        # PAN's check-digit algorithm is unpublished by ITD/NSDL/UTIITSL,
+        # so there is no checksum to run: format only, checksum_valid=None.
+        # detection.pan.pan_signals() exposes entity-code and serial
+        # checks to P3 as confidence signals rather than gates.
+        validator=None,
         strip=' -'),
-    # No public checksum -> validator None -> lower baseline confidence
-    # is P3's job, but the contract records checksum_valid=None so P3
-    # can see it.
     'VOTER_ID': dict(
         window=2, priority=60,
         pattern=re.compile(r'^[A-Z]{3}\d{7}$'),

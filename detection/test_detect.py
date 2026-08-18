@@ -77,8 +77,9 @@ def test_card_not_double_reported_as_aadhaar():
 
 
 def test_pan_inline():
+    """PAN has no published check-digit algorithm, so checksum_valid is None."""
     out = detect(_extraction(_page(["PAN", "ALWPG5809L"])))
-    assert _by_type(out, "PAN")["checksum_valid"] is True
+    assert _by_type(out, "PAN")["checksum_valid"] is None
 
 
 def test_formatless_types_report_checksum_none():
@@ -114,11 +115,12 @@ def test_output_matches_scoring_input_contract():
     assert set(out) == {"doc_id", "candidates"}
     assert out["doc_id"] == "test_doc"
     required = {"pii_type", "value", "page_num", "bbox",
-                "checksum_valid", "match_source"}
+                "checksum_valid", "match_source", "ocr_conf"}
     for candidate in out["candidates"]:
-        assert required <= set(candidate)
+        assert set(candidate) == required     # no extra fields leaked
         assert candidate["match_source"] == "regex"
         assert len(candidate["bbox"]) == 4
+        assert candidate["checksum_valid"] in (True, None)   # never False
 
 
 def test_bbox_none_survives_fieldless_sources():
