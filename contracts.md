@@ -66,7 +66,7 @@ Return shape:
   "candidates": [
     {
       "pii_type": "AADHAAR",        # AADHAAR | CREDIT_CARD | PAN | VOTER_ID
-                                    # | PASSPORT | PHONE | EMAIL
+                              # | PASSPORT | PHONE | EMAIL | DL
       "value": "2341 2341 2346",    # as it appeared, separators preserved
       "page_num": 0,                # zero-indexed
       "bbox": [x0, y0, x1, y1],     # union across joined tokens; None for
@@ -87,8 +87,10 @@ Rules:
 - `checksum_valid: None` means the type has no published checksum (PAN's
   check digit algorithm is unpublished; phone/email/voter have none). P3
   should weigh "no checksum exists" differently from a pass.
-- Overlapping spans are resolved before emission ΓÇö longest span wins, then
-  priority. A 16-digit card will not also appear as a 12-digit AADHAAR.
+- Overlapping spans are resolved before emission. Any candidate that
+  overlaps a stronger candidate is rejected. Strength is determined by
+  span length, then priority, then earlier start position. A 16-digit
+  card will not also appear as a 12-digit AADHAAR.
 - PAN validation is format-only and deliberately permissive. Entity code
   and serial checks are available via `detection.pan.pan_signals()` as
   confidence signals, not gates.
