@@ -10,18 +10,29 @@ import yaml
 DEFAULT_POLICY_PATH = Path(__file__).resolve().parent.parent / "policy" / "profiles.yaml"
 
 # necessity_for: is this pii_type actually needed for the document's
-# purpose under this profile? First-draft mapping, not policy-reviewed.
-# Falls back to OPTIONAL for anything not listed.
+# purpose under this profile? Falls back to OPTIONAL for anything not
+# listed.
+#
+# REGULATED_KYC is still an open question, not a considered answer: the
+# workplan's own section 3b says "the ONE identifier the process legally
+# requires is kept; every other identifier is removed" -- which implies
+# only one type here should be REQUIRED, not most of them. Left as a
+# rough placeholder pending a real decision on which single identifier
+# that is for a given KYC context -- don't treat this row as final.
 NECESSITY_MATRIX = {
     "REGULATED_KYC": {
         "AADHAAR": "REQUIRED", "PAN": "REQUIRED", "DL": "REQUIRED",
         "CREDIT_CARD": "OPTIONAL", "PHONE": "REQUIRED", "EMAIL": "REQUIRED",
         "NAME": "REQUIRED", "ADDRESS": "REQUIRED",
     },
+    # DL/ADDRESS are MASK (not REMOVE) in policy/profiles.yaml here, so
+    # EXCESS ("never needed") would contradict masking-instead-of-removing.
+    # NAME/EMAIL are REQUIRED per section 3b's own wording: "name and email
+    # kept because the service legitimately needs them."
     "THIRD_PARTY_SERVICE": {
-        "AADHAAR": "EXCESS", "PAN": "EXCESS", "DL": "EXCESS",
-        "CREDIT_CARD": "EXCESS", "PHONE": "OPTIONAL", "EMAIL": "OPTIONAL",
-        "NAME": "OPTIONAL", "ADDRESS": "EXCESS",
+        "AADHAAR": "EXCESS", "PAN": "EXCESS", "DL": "OPTIONAL",
+        "CREDIT_CARD": "EXCESS", "PHONE": "OPTIONAL", "EMAIL": "REQUIRED",
+        "NAME": "REQUIRED", "ADDRESS": "OPTIONAL",
     },
     "PUBLIC_DISCLOSURE": {
         "AADHAAR": "EXCESS", "PAN": "EXCESS", "DL": "EXCESS",

@@ -27,4 +27,36 @@ action, necessity, reasons = resolver.resolve({"pii_type": "UNKNOWN_TYPE"}, "REG
 assert action == "FLAG"
 assert necessity == "OPTIONAL"
 
+# --- Corrections against the workplan's canonical section 3b matrix ---
+
+# THIRD_PARTY_SERVICE: PHONE/EMAIL kept ("the service legitimately needs
+# them"), not masked -- and their necessity is REQUIRED, not OPTIONAL, for
+# NAME/EMAIL specifically (PHONE is the one explicitly illustrated as
+# OPTIONAL: "a phone number on a job application").
+action, necessity, _ = resolver.resolve({"pii_type": "PHONE"}, "THIRD_PARTY_SERVICE", matrix)
+assert action == "KEEP"
+assert necessity == "OPTIONAL"
+
+action, necessity, _ = resolver.resolve({"pii_type": "EMAIL"}, "THIRD_PARTY_SERVICE", matrix)
+assert action == "KEEP"
+assert necessity == "REQUIRED"
+
+action, necessity, _ = resolver.resolve({"pii_type": "NAME"}, "THIRD_PARTY_SERVICE", matrix)
+assert action == "KEEP"
+assert necessity == "REQUIRED"
+
+# THIRD_PARTY_SERVICE: PAN removed outright, not masked.
+action, _, _ = resolver.resolve({"pii_type": "PAN"}, "THIRD_PARTY_SERVICE", matrix)
+assert action == "REMOVE"
+
+# REGULATED_KYC: PAN is the identifier the process actually needs -- kept, not masked.
+action, necessity, _ = resolver.resolve({"pii_type": "PAN"}, "REGULATED_KYC", matrix)
+assert action == "KEEP"
+assert necessity == "REQUIRED"
+
+# INTERNAL_REVIEW is alert-only -- every type FLAGs, nothing is silently KEPT.
+for pii_type in ("AADHAAR", "PAN", "DL", "CREDIT_CARD", "PHONE", "EMAIL", "NAME", "ADDRESS"):
+    action, _, _ = resolver.resolve({"pii_type": pii_type}, "INTERNAL_REVIEW", matrix)
+    assert action == "FLAG", (pii_type, action)
+
 print("All resolver tests passed")
