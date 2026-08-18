@@ -3,5 +3,6 @@ pyyaml
 pytest
 easyocr
 spacy
+streamlit
 # en_core_web_sm isn't a pip package -- after installing requirements, also run:
 #   python -m spacy download en_core_web_sm

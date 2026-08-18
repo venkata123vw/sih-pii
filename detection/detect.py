@@ -20,11 +20,16 @@ import re
 #   pattern:          pre-filter on the joined+normalised string (cheap)
 #   validator:        None = format-only, so checksum_valid stays None
 #   priority:         higher wins when two types claim overlapping spans
-#   raw_requires:     optional. regex the UNSTRIPPED run must match — used
-#                     to demand punctuation/grouping a bare number lacks
-#   context_keywords: optional. one must appear in the page's full_text.
-#                     For types whose shape alone cannot distinguish them
-#                     from ordinary reference codes.
+#   corroboration:    optional. For types whose bare form is genuinely
+#                     ambiguous with ordinary document noise. The candidate
+#                     is kept if ANY listed signal fires:
+#                       self_evident — regex on the normalised string that
+#                                      only a real identifier would match
+#                                      (e.g. an explicit +91 / 0 prefix)
+#                       raw_grouped  — regex on the UNSTRIPPED run, i.e. the
+#                                      value arrived punctuated or grouped
+#                       keywords     — one of these appears in the page text
+#                     If none fire, the candidate is dropped.
 # ---------------------------------------------------------------------
 REGISTRY = {
     'AADHAAR': dict(
@@ -52,20 +57,30 @@ REGISTRY = {
     'VOTER_ID': dict(
         window=2, priority=60,
         pattern=re.compile(r'^[A-Z]{3}\d{7}$'),
-        context_keywords=('voter', 'epic', 'election', 'elector'),
+        # Only the keyword path exists, so this is effectively a hard gate.
+        corroboration=dict(
+            keywords=('voter', 'epic', 'election', 'elector'),
+        ),
         validator=None, strip=' -'),
     'PASSPORT': dict(
         window=2, priority=60,
         pattern=re.compile(r'^[A-PR-WY][1-9]\d{6}$'),
         validator=None, strip=' -'),
-    # A bare 10-digit run starting 6-9 is an amount as often as a phone
-    # (measured: 10% FP on realistic invoice strings). Require either an
-    # explicit +91/0 prefix, or that the raw form was grouped/punctuated —
-    # 'raw_requires' is checked against the UNSTRIPPED token run.
+    # A bare 10-digit run starting 6-9 is a rupee amount as often as a
+    # phone number (measured: 10% FP on realistic invoice strings). So a
+    # bare form needs corroboration; a prefixed or grouped one does not.
     'PHONE': dict(
         window=3, priority=40,
         pattern=re.compile(r'^(?:(?:\+?91)|0)?[6-9]\d{9}$'),
-        raw_requires=re.compile(r'[\s\-()+]|^(?:0|91)'),
+        corroboration=dict(
+            # 11+ chars means a real +91 / 91 / 0 prefix is present. Length
+            # is the test, NOT leading digits: '9198765432' is a bare
+            # 10-digit number that merely starts 9,1 — not a +91 prefix.
+            self_evident=re.compile(r'^(?:\+?91|0)[6-9]\d{9}$'),
+            raw_grouped=re.compile(r'[\s\-()]'),
+            keywords=('phone', 'mobile', 'mob', 'contact', 'tel',
+                      'cell', 'whatsapp', 'landline'),
+        ),
         validator=None, strip=' -()'),
     'EMAIL': dict(
         window=1, priority=50,
@@ -83,6 +98,30 @@ def _union_bbox(tokens):
             max(b[2] for b in boxes), max(b[3] for b in boxes)]
 
 
+def _corroborated(spec, raw, norm, page_text):
+    """
+    True if this candidate may be kept. Types with no `corroboration` key
+    are unconditionally kept — their checksum already does the work.
+    """
+    rules = spec.get('corroboration')
+    if not rules:
+        return True
+
+    self_evident = rules.get('self_evident')
+    if self_evident and self_evident.match(norm):
+        return True
+
+    raw_grouped = rules.get('raw_grouped')
+    if raw_grouped and raw_grouped.search(raw):
+        return True
+
+    keywords = rules.get('keywords')
+    if keywords and any(k in page_text for k in keywords):
+        return True
+
+    return False
+
+
 def _normalise(raw, strip_chars):
     for ch in strip_chars:
         raw = raw.replace(ch, '')
@@ -94,9 +133,6 @@ def _scan_page(page, doc_id):
     page_text = (page.get('full_text') or '').lower()
     hits = []
     for pii_type, spec in REGISTRY.items():
-        keywords = spec.get('context_keywords')
-        if keywords and not any(k in page_text for k in keywords):
-            continue                  # required context absent on this page
         for start in range(len(tokens)):
             for length in range(1, spec['window'] + 1):
                 run = tokens[start:start + length]
@@ -106,9 +142,8 @@ def _scan_page(page, doc_id):
                 norm = _normalise(raw, spec['strip'])
                 if not spec['pattern'].match(norm):
                     continue
-                raw_req = spec.get('raw_requires')
-                if raw_req and not raw_req.search(raw):
-                    continue          # e.g. bare 10 digits, no grouping
+                if not _corroborated(spec, raw, norm, page_text):
+                    continue          # ambiguous bare form, nothing backs it
                 validator = spec['validator']
                 if validator is None:
                     checksum_valid = None
