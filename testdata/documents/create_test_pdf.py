@@ -2,9 +2,7 @@ import pymupdf
 
 doc = pymupdf.open()
 
-# -------------------------
-# PAGE 1: Normal page
-# -------------------------
+# PAGE 1 - Normal page
 page = doc.new_page(width=600, height=800)
 
 page.insert_text((100, 150), "Aadhaar: 2341 2341 2346", fontsize=20)
@@ -14,9 +12,7 @@ page.insert_text((100, 300), "Order ID: 202508170008", fontsize=20)
 page.insert_text((100, 350), "PAN: ALWPG5809L", fontsize=20)
 page.insert_text((100, 400), "Card: 4242 4242 4242 4242", fontsize=20)
 
-# -------------------------
-# PAGE 2: Rotated page
-# -------------------------
+# PAGE 2 - Rotated page
 page2 = doc.new_page(width=600, height=800)
 
 page2.insert_text(
@@ -31,10 +27,12 @@ page2.insert_text(
     fontsize=20
 )
 
-# Rotate second page
+# Rotate second page by 90 degrees
 page2.set_rotation(90)
 
+# Save PDF
 doc.save("testdata/documents/test.pdf")
+
 doc.close()
 
 print("Final 2-page test PDF created successfully!")
