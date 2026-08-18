@@ -74,12 +74,7 @@ with tab_file:
     )
 
 with tab_paste:
-    st.warning(
-        "Known issue: pasted text currently crashes scoring for any detection "
-        "without page coordinates — a bug in scoring/context.py (line 81), not "
-        "here. Flagged to the team; this tab will error until it's fixed.",
-        icon="⚠️",
-    )
+    st.caption("Paste-text mode supports detection and scoring only. It has no original file to redact.")
     pasted_text = st.text_area(
         "Paste raw text, CSV rows, or form field values",
         height=150,
@@ -103,11 +98,7 @@ if run:
                 filename = "pasted-text.txt"
                 analysis = pipeline.analyze_pasted_text(pasted_text, profile)
         except Exception as e:
-            st.error(
-                f"Analysis failed: {e}\n\n"
-                "If this came from the paste-text tab, see the known issue "
-                "above (scoring/context.py bbox=None bug)."
-            )
+            st.error(f"Analysis failed: {e}")
             analysis = None
 
     if analysis:
