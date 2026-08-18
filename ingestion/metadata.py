@@ -29,6 +29,7 @@ from xml.etree import ElementTree
 
 import docx
 import pymupdf
+from PIL import Image
 
 # field -> category. Fields not listed here are skipped even if pymupdf
 # returns them (e.g. 'format', 'trapped' aren't identity-revealing).
@@ -152,10 +153,53 @@ def _scan_docx(filepath):
     return {"source_type": "docx", "findings": findings}
 
 
+_GPS_IFD_TAG = 0x8825
+_EXIF_FIELDS = {
+    0x010F: ("camera_make", "device"),      # Make
+    0x0110: ("camera_model", "device"),     # Model
+    0x0131: ("software", "tooling"),        # Software
+    0x0132: ("modification_date", "timestamp"),  # DateTime
+    0x9003: ("date_taken", "timestamp"),    # DateTimeOriginal
+}
+
+
+def _dms_to_decimal(dms, ref):
+    degrees, minutes, seconds = (float(v) for v in dms)
+    decimal = degrees + minutes / 60 + seconds / 3600
+    if ref in ("S", "W"):
+        decimal = -decimal
+    return decimal
+
+
+def _scan_image(filepath):
+    findings = []
+    with Image.open(filepath) as im:
+        exif = im.getexif()
+
+        for tag, (field, category) in _EXIF_FIELDS.items():
+            value = exif.get(tag)
+            if value:
+                findings.append({"field": field, "value": str(value), "category": category})
+
+        gps = exif.get_ifd(_GPS_IFD_TAG)
+        if gps and 2 in gps and 4 in gps:
+            lat = _dms_to_decimal(gps[2], gps.get(1, "N"))
+            lon = _dms_to_decimal(gps[4], gps.get(3, "E"))
+            findings.append({
+                "field": "gps_coordinates",
+                "value": f"{lat:.4f}, {lon:.4f}",
+                "category": "location",
+            })
+
+    return {"source_type": "image", "findings": findings}
+
+
 def scan_metadata(filepath: str) -> dict:
     ext = os.path.splitext(filepath)[1].lower()
     if ext == ".pdf":
         return _scan_pdf(filepath)
     if ext == ".docx":
         return _scan_docx(filepath)
+    if ext in (".jpg", ".jpeg", ".png"):
+        return _scan_image(filepath)
     return {"source_type": "unsupported", "findings": []}

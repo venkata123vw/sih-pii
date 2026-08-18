@@ -1,5 +1,6 @@
 pymupdf
 python-docx
+Pillow
 pyyaml
 pytest
 easyocr

@@ -103,3 +103,76 @@ def test_docx_company_and_manager_reported_when_present(tmp_path):
     assert findings["company"]["category"] == "organization"
     assert findings["manager"]["value"] == "Jamie Synthetic Manager"
     assert findings["manager"]["category"] == "identity"
+
+
+def _make_synthetic_jpeg_with_exif(path, *, make=None, model=None, software=None, gps=None):
+    from PIL import Image
+    from PIL.TiffImagePlugin import IFDRational
+
+    im = Image.new("RGB", (4, 4), color="red")
+    exif = im.getexif()
+    if make:
+        exif[0x010F] = make
+    if model:
+        exif[0x0110] = model
+    if software:
+        exif[0x0131] = software
+    if gps:
+        lat_deg, lat_ref, lon_deg, lon_ref = gps
+        exif[0x8825] = {
+            1: lat_ref, 2: tuple(IFDRational(v, 1) for v in lat_deg),
+            3: lon_ref, 4: tuple(IFDRational(v, 1) for v in lon_deg),
+        }
+    im.save(path, format="jpeg", exif=exif)
+
+
+def test_image_with_no_exif_has_no_findings(tmp_path):
+    from PIL import Image
+
+    p = tmp_path / "plain.jpg"
+    Image.new("RGB", (4, 4), color="blue").save(p, format="jpeg")
+
+    r = scan_metadata(str(p))
+    assert r["source_type"] == "image"
+    assert r["findings"] == []
+
+
+def test_image_device_metadata_reported(tmp_path):
+    p = tmp_path / "device.jpg"
+    _make_synthetic_jpeg_with_exif(p, make="TestCam", model="TestModel X", software="TestSoftware")
+
+    r = scan_metadata(str(p))
+    findings = {f["field"]: f for f in r["findings"]}
+    assert findings["camera_make"]["value"] == "TestCam"
+    assert findings["camera_make"]["category"] == "device"
+    assert findings["camera_model"]["value"] == "TestModel X"
+    assert findings["software"]["category"] == "tooling"
+
+
+def test_image_gps_decoded_to_decimal_degrees(tmp_path):
+    p = tmp_path / "geotagged.jpg"
+    _make_synthetic_jpeg_with_exif(
+        p,
+        gps=((12, 58, 0), "N", (77, 35, 0), "E"),
+    )
+
+    r = scan_metadata(str(p))
+    findings = {f["field"]: f for f in r["findings"]}
+    assert findings["gps_coordinates"]["category"] == "location"
+    lat_str, lon_str = findings["gps_coordinates"]["value"].split(", ")
+    assert abs(float(lat_str) - 12.9667) < 0.001
+    assert abs(float(lon_str) - 77.5833) < 0.001
+
+
+def test_image_gps_south_west_are_negative(tmp_path):
+    p = tmp_path / "geotagged_sw.jpg"
+    _make_synthetic_jpeg_with_exif(
+        p,
+        gps=((12, 58, 0), "S", (77, 35, 0), "W"),
+    )
+
+    r = scan_metadata(str(p))
+    findings = {f["field"]: f for f in r["findings"]}
+    lat_str, lon_str = findings["gps_coordinates"]["value"].split(", ")
+    assert float(lat_str) < 0
+    assert float(lon_str) < 0
