@@ -201,3 +201,54 @@ def test_partial_overlap_keeps_only_stronger_candidate():
 
     assert len(result) == 1
     assert result[0]["pii_type"] == "TYPE_A"
+
+def test_phone_keyword_must_be_a_whole_word():
+    """
+    A phone-related substring inside another word must not provide
+    corroboration.
+
+    Example: 'Microphone' contains 'phone', but does not mean the
+    following number is a phone number.
+    """
+    for label in ("Microphone", "phonebook", "smartphone"):
+        out = detect(_extraction(_page([label, "9876543210"])))
+        assert "PHONE" not in _types(out), label
+
+
+def test_grouped_number_without_phone_context_is_not_a_phone():
+    """
+    Formatting alone must not turn an invoice/order number into PHONE.
+    """
+    for number in ("98765-43210", "98765 43210"):
+        out = detect(_extraction(_page(["Total", number])))
+        assert "PHONE" not in _types(out), number
+
+
+def test_grouped_phone_with_phone_context_is_detected():
+    """
+    A normally grouped Indian phone number with explicit phone context
+    should still be detected.
+    """
+    for number in ("98765-43210", "98765 43210"):
+        out = detect(_extraction(_page(["Mobile", number])))
+        assert "PHONE" in _types(out), number
+
+
+def test_country_code_phone_is_detected():
+    """
+    Explicit +91 country-code form is self-evident and does not need
+    a phone keyword.
+    """
+    for number in ("+919876543210", "+91 98765 43210"):
+        out = detect(_extraction(_page([number])))
+        assert "PHONE" in _types(out), number
+
+
+def test_bare_91_prefix_is_not_treated_as_country_code():
+    """
+    A bare 10-digit number beginning with 91 is not automatically
+    +91 + phone-number. This protects the previous regression.
+    """
+    for number in ("9198765432", "9123456780"):
+        out = detect(_extraction(_page([number])))
+        assert "PHONE" not in _types(out)

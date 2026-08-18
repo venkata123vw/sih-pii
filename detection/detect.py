@@ -77,7 +77,6 @@ REGISTRY = {
             # is the test, NOT leading digits: '9198765432' is a bare
             # 10-digit number that merely starts 9,1 — not a +91 prefix.
             self_evident=re.compile(r'^(?:\+?91|0)[6-9]\d{9}$'),
-            raw_grouped=re.compile(r'[\s\-()]'),
             keywords=('phone', 'mobile', 'mob', 'contact', 'tel',
                       'cell', 'whatsapp', 'landline'),
         ),
@@ -111,12 +110,11 @@ def _corroborated(spec, raw, norm, page_text):
     if self_evident and self_evident.match(norm):
         return True
 
-    raw_grouped = rules.get('raw_grouped')
-    if raw_grouped and raw_grouped.search(raw):
-        return True
-
     keywords = rules.get('keywords')
-    if keywords and any(k in page_text for k in keywords):
+    if keywords and any(
+        re.search(r'\b' + re.escape(k) + r'\b', page_text)
+        for k in keywords
+    ):
         return True
 
     return False
@@ -192,9 +190,7 @@ def _resolve_overlaps(hits):
             h['_span'][0],
         )
     )
-
     kept = []
-
     for h in ordered:
         s, e = h['_span']
 
@@ -211,8 +207,8 @@ def _resolve_overlaps(hits):
     for h in kept:
         h.pop('_span')
         h.pop('_priority')
-
     return kept
+
 
 def detect(extraction) -> dict:
     """extraction = P2's output dict. Returns the P1 -> P3 contract."""
