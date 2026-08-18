@@ -12,7 +12,7 @@ def test_p4_to_p2_contract():
     p4_output = {
         "detections": [
             {
-                "page_index": 0,
+                "page_num": 0,
                 "bbox": [186.0, 177.0, 332.0, 207.0],
                 "text": "1234 5678 9012",
             }
