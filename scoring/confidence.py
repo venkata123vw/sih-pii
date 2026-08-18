@@ -59,11 +59,18 @@ def score(candidate: dict, page_context: dict) -> float:
         if not pan["serial_nonzero"]:
             total += WEIGHT_PAN_ZERO_SERIAL
 
+    is_ner = candidate.get("match_source") == "ner"
+    if is_ner:
+        # NER itself is a signal, not a neutral default -- a bare NER hit
+        # with nothing else should land at the ceiling, not at 0. Other
+        # signals (negative_match especially) can still pull it back down.
+        total += NER_CONFIDENCE_CEILING
+
     ocr_conf = signals["ocr_conf"]
     if ocr_conf is not None and ocr_conf < OCR_CONF_DAMPEN_THRESHOLD:
         total *= ocr_conf
 
-    if candidate.get("match_source") == "ner":
+    if is_ner:
         total = min(total, NER_CONFIDENCE_CEILING)
 
     return max(0.0, min(1.0, total))
@@ -96,11 +103,11 @@ def signal_reasons(candidate: dict, page_context: dict) -> list[str]:
         if not pan["serial_nonzero"]:
             reasons.append("pan_zero_serial")
 
+    if candidate.get("match_source") == "ner":
+        reasons.append("ner_match")
+
     ocr_conf = signals["ocr_conf"]
     if ocr_conf is not None and ocr_conf < OCR_CONF_DAMPEN_THRESHOLD:
         reasons.append(f"ocr_conf_dampened:{ocr_conf:.2f}")
-
-    if candidate.get("match_source") == "ner":
-        reasons.append("ner_ceiling_applied")
 
     return reasons

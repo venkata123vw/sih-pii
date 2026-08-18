@@ -65,6 +65,28 @@ NER_CANDIDATE = {
 score = confidence.score(NER_CANDIDATE, AADHAAR_CTX)
 assert score == 0.5
 
+# Regression: a bare NER hit with NO other signal must land AT the
+# ceiling (0.5), not at 0 -- previously the ceiling only capped, never
+# provided a base, so every clean NER detection silently scored 0.0.
+CLEAN_NAME_PAGE = {"pages": [{"page_num": 0, "width": 100, "height": 100,
+                              "tokens": [], "full_text": "Matthew Davis"}]}
+CLEAN_NAME_CANDIDATE = {
+    "pii_type": "NAME", "value": "Matthew Davis", "page_num": 0,
+    "bbox": None, "checksum_valid": None, "match_source": "ner",
+}
+assert confidence.score(CLEAN_NAME_CANDIDATE, CLEAN_NAME_PAGE) == 0.5
+assert "ner_match" in confidence.signal_reasons(CLEAN_NAME_CANDIDATE, CLEAN_NAME_PAGE)
+
+# A negative signal can still pull an NER hit below the ceiling
+NOISY_NAME_PAGE = {"pages": [{"page_num": 0, "width": 100, "height": 100,
+                              "tokens": [], "full_text": "Invoice: Wireless Keyboard"}]}
+NOISY_NAME_CANDIDATE = {
+    "pii_type": "NAME", "value": "Wireless Keyboard", "page_num": 0,
+    "bbox": None, "checksum_valid": None, "match_source": "ner",
+}
+score = confidence.score(NOISY_NAME_CANDIDATE, NOISY_NAME_PAGE)
+assert abs(score - 0.2) < 1e-9   # 0.5 base - 0.3 negative signal
+
 # --- PAN signals (detection.pan.pan_signals()): PAN has no checksum, so
 # entity-code/serial plausibility feed confidence as signals, not a gate.
 def _pan_page(text):
