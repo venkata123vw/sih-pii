@@ -6,25 +6,13 @@ and calculates Precision, Recall and F1 score.
 """
 
 import json
-from pathlib import Path
-
-"""
-P6 Evaluation Script
-
-Compares detector predictions against synthetic ground truth
-and calculates Precision, Recall and F1 score.
-"""
-
 import sys
 from pathlib import Path
-import json
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from detection.detect import detect
-
-
 
 
 # ---------------------------------------------------------
