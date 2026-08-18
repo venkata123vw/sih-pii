@@ -11,5 +11,8 @@ python-dateutil==2.9.0.post0
 python-docx==1.2.0
 PyYAML==6.0.3
 six==1.17.0
+spacy==3.8.13
+# en_core_web_sm isn't a pip package -- after installing requirements, also run:
+#   python -m spacy download en_core_web_sm
 typing_extensions==4.16.0
 tzdata==2026.3
