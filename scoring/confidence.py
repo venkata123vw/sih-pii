@@ -5,6 +5,8 @@ into a single confidence float, clamped to [0, 1].
 Weighted linear sum -- see reference weight table. No decision trees.
 """
 
+from detection.pan import pan_signals
+
 from scoring import context
 
 WEIGHT_CHECKSUM_VALID = 0.4
@@ -14,6 +16,19 @@ WEIGHT_DOC_TYPE_BOOST = 0.1
 WEIGHT_NEGATIVE_SIGNAL = -0.3
 OCR_CONF_DAMPEN_THRESHOLD = 0.7
 NER_CONFIDENCE_CEILING = 0.5
+
+# PAN has no published checksum (checksum_valid stays None -- see
+# detection/pan.py). validate_pan() is format-only there by design;
+# entity-code and serial-number plausibility are exposed as signals via
+# pan_signals() instead of being a hard gate, so they're weighed here.
+WEIGHT_PAN_UNKNOWN_ENTITY_CODE = -0.15
+WEIGHT_PAN_ZERO_SERIAL = -0.25
+
+
+def _pan_signals_for(candidate: dict) -> dict | None:
+    if candidate.get("pii_type") != "PAN":
+        return None
+    return pan_signals(candidate["value"])
 
 
 def score(candidate: dict, page_context: dict) -> float:
@@ -36,6 +51,13 @@ def score(candidate: dict, page_context: dict) -> float:
 
     if signals["negative_match"]:
         total += WEIGHT_NEGATIVE_SIGNAL
+
+    pan = _pan_signals_for(candidate)
+    if pan is not None:
+        if not pan["known_entity_code"]:
+            total += WEIGHT_PAN_UNKNOWN_ENTITY_CODE
+        if not pan["serial_nonzero"]:
+            total += WEIGHT_PAN_ZERO_SERIAL
 
     ocr_conf = signals["ocr_conf"]
     if ocr_conf is not None and ocr_conf < OCR_CONF_DAMPEN_THRESHOLD:
@@ -66,6 +88,13 @@ def signal_reasons(candidate: dict, page_context: dict) -> list[str]:
 
     if signals["negative_match"]:
         reasons.append(f"negative_signal:{signals['negative_keyword']}")
+
+    pan = _pan_signals_for(candidate)
+    if pan is not None:
+        if not pan["known_entity_code"]:
+            reasons.append("pan_unknown_entity_code")
+        if not pan["serial_nonzero"]:
+            reasons.append("pan_zero_serial")
 
     ocr_conf = signals["ocr_conf"]
     if ocr_conf is not None and ocr_conf < OCR_CONF_DAMPEN_THRESHOLD:
