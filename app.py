@@ -125,7 +125,13 @@ if st.session_state.analysis:
             )
 
     with st.expander("Metadata findings (EXIF / hidden layers)"):
-        st.caption("No metadata scanner output yet — placeholder for P2's metadata stage.")
+        metadata = analysis.get("metadata")
+        findings = metadata["findings"] if metadata else []
+        if findings:
+            for f in findings:
+                st.caption(f"**{f['field']}** ({f['category']}): {f['value']}")
+        else:
+            st.caption("No metadata findings for this file (or paste-text has no file to scan).")
 
     st.caption("Uncheck any item you don't want actioned. Defaults follow the selected profile.")
 

@@ -11,6 +11,9 @@ Status per track (verified directly against each module, not assumed):
                           (spaCy en_core_web_sm — no longer a stub).
     redaction.redact    — REAL. Mutates a PDF file ON DISK — very different
                           calling convention from the old stub (see apply()).
+    ingestion.metadata   — REAL. PDF/DOCX/image metadata scan, attached
+                            additively as analysis["metadata"]. Not part
+                            of the P3 scoring contract.
 
 Three integration fixes made in an earlier pass, still relevant:
 
@@ -53,6 +56,7 @@ import os
 import tempfile
 
 from ingestion.extract import extract as extract_real
+from ingestion.metadata import scan_metadata
 from detection.detect import detect as detect_real
 from scoring.score import score as score_real
 from redaction.redact import apply_redactions  # see assumption note above
@@ -78,6 +82,9 @@ def analyze(file_bytes, filename, profile,
         candidates = detect_fn(extraction)
         # page_ctx = the whole extraction dict — see module docstring, fix (1)
         scored = score_fn(candidates, profile, extraction)
+        # Additive only — metadata_findings has not been proposed to
+        # scoring/policy, so it rides alongside detections, not inside them.
+        scored["metadata"] = scan_metadata(tmp_path)
     finally:
         os.unlink(tmp_path)
 
