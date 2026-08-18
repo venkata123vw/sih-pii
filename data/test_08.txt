@@ -1,0 +1,6 @@
+INVOICE DOCUMENT
+Invoice Number: 123456789012
+Product: Laptop Stand
+Quantity: 1
+Amount: 1499 INR
+This number is an invoice identifier, not government-issued PII.

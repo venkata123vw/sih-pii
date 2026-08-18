@@ -1,0 +1,6 @@
+INVOICE
+Invoice Number: INV-2026-0045
+Product: Wireless Keyboard
+Quantity: 2
+Total Amount: 2499 INR
+Thank you for your purchase.

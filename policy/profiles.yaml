@@ -1,0 +1,45 @@
+# Policy matrix: context_profile -> pii_type -> action.
+# action in {REMOVE, MASK, KEEP, FLAG}.
+#
+# First draft, not yet reviewed by a policy owner. Adjust freely --
+# resolver.py just reads this file, no logic changes needed to retune it.
+
+PUBLIC_DISCLOSURE:
+  AADHAAR: REMOVE
+  PAN: REMOVE
+  DL: REMOVE
+  CREDIT_CARD: REMOVE
+  PHONE: REMOVE
+  EMAIL: REMOVE
+  NAME: MASK
+  ADDRESS: REMOVE
+
+THIRD_PARTY_SERVICE:
+  AADHAAR: REMOVE
+  PAN: MASK
+  DL: MASK
+  CREDIT_CARD: REMOVE
+  PHONE: MASK
+  EMAIL: MASK
+  NAME: KEEP
+  ADDRESS: MASK
+
+REGULATED_KYC:
+  AADHAAR: MASK
+  PAN: MASK
+  DL: MASK
+  CREDIT_CARD: MASK
+  PHONE: KEEP
+  EMAIL: KEEP
+  NAME: KEEP
+  ADDRESS: KEEP
+
+INTERNAL_REVIEW:
+  AADHAAR: FLAG
+  PAN: FLAG
+  DL: FLAG
+  CREDIT_CARD: FLAG
+  PHONE: KEEP
+  EMAIL: KEEP
+  NAME: KEEP
+  ADDRESS: KEEP
