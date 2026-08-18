@@ -92,4 +92,20 @@ signals = context.get_signals(PASTED_TEXT_CANDIDATE, {"pages": [PASTED_TEXT_PAGE
 assert signals["keyword_match"] is True   # keyword/negative signals still work, they don't need bbox
 assert signals["ocr_conf"] is None
 
+# get_signals: prefers the candidate's own ocr_conf (detect.py's
+# min-across-joined-tokens) over the bbox-overlap reconstruction --
+# even when bbox is None, which would otherwise force a None result.
+OWN_OCR_CANDIDATE = {
+    "pii_type": "AADHAAR", "value": "1234 5678 9012", "page_num": 0,
+    "bbox": None, "checksum_valid": True, "match_source": "regex", "ocr_conf": 0.42,
+}
+signals = context.get_signals(OWN_OCR_CANDIDATE, AADHAAR_CTX)
+assert signals["ocr_conf"] == 0.42
+
+# get_signals: falls back to bbox-overlap when the candidate has no
+# ocr_conf of its own (e.g. NER candidates never carry this field).
+assert "ocr_conf" not in AADHAAR_CANDIDATE
+signals = context.get_signals(AADHAAR_CANDIDATE, AADHAAR_CTX)
+assert abs(signals["ocr_conf"] - (0.95 + 0.95 + 0.55) / 3) < 1e-9
+
 print("All context tests passed")

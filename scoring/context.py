@@ -108,11 +108,19 @@ def get_signals(candidate: dict, page_ctx: dict) -> dict:
     kw_match, kw = keyword_proximity(full_text, candidate["value"], candidate["pii_type"])
     neg_match, neg_kw = negative_signal(full_text, candidate["value"])
 
+    # detect.py puts its own ocr_conf on the candidate (min across the
+    # joined tokens that produced it) -- more precise than reconstructing
+    # it via bbox overlap, so prefer it. NER candidates don't carry this
+    # field, so fall back to the bbox-overlap heuristic for those.
+    ocr_conf = candidate.get("ocr_conf")
+    if ocr_conf is None and page is not None:
+        ocr_conf = ocr_confidence(page, candidate["bbox"])
+
     return {
         "keyword_match": kw_match,
         "keyword": kw,
         "negative_match": neg_match,
         "negative_keyword": neg_kw,
         "doc_type_boost": doc_type_boost(full_text),
-        "ocr_conf": ocr_confidence(page, candidate["bbox"]) if page else None,
+        "ocr_conf": ocr_conf,
     }
