@@ -87,9 +87,40 @@ def test_formatless_types_report_checksum_none():
     Phone/email/voter have no checksum. checksum_valid must be None, not
     False — P3 weighs 'no checksum exists' differently from 'failed'.
     """
-    out = detect(_extraction(_page(["Mob", "9876543210", "a@b.com"])))
+    out = detect(_extraction(_page(["Mob", "98765", "43210", "a@b.com"])))
     assert _by_type(out, "PHONE")["checksum_valid"] is None
     assert _by_type(out, "EMAIL")["checksum_valid"] is None
+
+
+def test_bare_ten_digits_is_not_a_phone():
+    """
+    Measured 10% FP: a bare unpunctuated 10-digit run starting 6-9 is a
+    rupee amount as often as a phone number. Require grouping or an
+    explicit +91/0 prefix.
+    """
+    out = detect(_extraction(_page(["Total", "9432835008"])))
+    assert "PHONE" not in _types(out)
+
+
+def test_phone_formats_still_detected():
+    """The tightening must not cost recall on real-world formats."""
+    for words in (["Mob", "98765", "43210"], ["+919876543210"],
+                  ["09876543210"], ["919876543210"]):
+        out = detect(_extraction(_page(words)))
+        assert "PHONE" in _types(out), words
+
+
+def test_voter_id_requires_context_keyword():
+    """
+    EPIC shape (AAA9999999) is identical to courier tracking codes —
+    measured 20% FP. The string alone cannot distinguish them, so a
+    keyword must appear in the page text.
+    """
+    page = _page(["Tracking", "SZS1656930"])
+    assert "VOTER_ID" not in _types(detect(_extraction(page)))
+
+    page = _page(["Voter", "ID", "ABC1234567"])
+    assert "VOTER_ID" in _types(detect(_extraction(page)))
 
 
 def test_multi_page_page_num_preserved():

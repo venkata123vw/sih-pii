@@ -16,10 +16,15 @@ import re
 # Pattern registry. Adding a PII type = adding a dict entry, no engine
 # changes. This is the "extensible beyond the initial three" answer.
 #
-#   window:    max adjacent tokens to join before testing
-#   pattern:   pre-filter on the joined+normalised string (cheap)
-#   validator: None = format-only, so checksum_valid stays None
-#   priority:  higher wins when two types claim overlapping spans
+#   window:           max adjacent tokens to join before testing
+#   pattern:          pre-filter on the joined+normalised string (cheap)
+#   validator:        None = format-only, so checksum_valid stays None
+#   priority:         higher wins when two types claim overlapping spans
+#   raw_requires:     optional. regex the UNSTRIPPED run must match — used
+#                     to demand punctuation/grouping a bare number lacks
+#   context_keywords: optional. one must appear in the page's full_text.
+#                     For types whose shape alone cannot distinguish them
+#                     from ordinary reference codes.
 # ---------------------------------------------------------------------
 REGISTRY = {
     'AADHAAR': dict(
@@ -41,17 +46,26 @@ REGISTRY = {
         # checks to P3 as confidence signals rather than gates.
         validator=None,
         strip=' -'),
+    # EPIC really is AAA9999999 — identical in shape to courier tracking
+    # and reference codes (measured: 20% FP). The string alone cannot
+    # distinguish them, so require a keyword in the page text.
     'VOTER_ID': dict(
         window=2, priority=60,
         pattern=re.compile(r'^[A-Z]{3}\d{7}$'),
+        context_keywords=('voter', 'epic', 'election', 'elector'),
         validator=None, strip=' -'),
     'PASSPORT': dict(
         window=2, priority=60,
         pattern=re.compile(r'^[A-PR-WY][1-9]\d{6}$'),
         validator=None, strip=' -'),
+    # A bare 10-digit run starting 6-9 is an amount as often as a phone
+    # (measured: 10% FP on realistic invoice strings). Require either an
+    # explicit +91/0 prefix, or that the raw form was grouped/punctuated —
+    # 'raw_requires' is checked against the UNSTRIPPED token run.
     'PHONE': dict(
         window=3, priority=40,
-        pattern=re.compile(r'^(?:\+?91)?[6-9]\d{9}$'),
+        pattern=re.compile(r'^(?:(?:\+?91)|0)?[6-9]\d{9}$'),
+        raw_requires=re.compile(r'[\s\-()+]|^(?:0|91)'),
         validator=None, strip=' -()'),
     'EMAIL': dict(
         window=1, priority=50,
@@ -77,8 +91,12 @@ def _normalise(raw, strip_chars):
 
 def _scan_page(page, doc_id):
     tokens = page.get('tokens', [])
+    page_text = (page.get('full_text') or '').lower()
     hits = []
     for pii_type, spec in REGISTRY.items():
+        keywords = spec.get('context_keywords')
+        if keywords and not any(k in page_text for k in keywords):
+            continue                  # required context absent on this page
         for start in range(len(tokens)):
             for length in range(1, spec['window'] + 1):
                 run = tokens[start:start + length]
@@ -88,6 +106,9 @@ def _scan_page(page, doc_id):
                 norm = _normalise(raw, spec['strip'])
                 if not spec['pattern'].match(norm):
                     continue
+                raw_req = spec.get('raw_requires')
+                if raw_req and not raw_req.search(raw):
+                    continue          # e.g. bare 10 digits, no grouping
                 validator = spec['validator']
                 if validator is None:
                     checksum_valid = None
