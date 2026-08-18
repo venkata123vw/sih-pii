@@ -76,9 +76,25 @@ def _bbox_overlap(a: list, b: list) -> bool:
     return ax0 < bx1 and bx0 < ax1 and ay0 < by1 and by0 < ay1
 
 
-def ocr_confidence(page: dict, bbox: list) -> float | None:
-    """Average ocr_conf of tokens whose bbox overlaps the candidate's bbox."""
-    matches = [t["ocr_conf"] for t in page.get("tokens", []) if _bbox_overlap(t["bbox"], bbox)]
+def ocr_confidence(page: dict, bbox: list | None) -> float | None:
+    """
+    Average ocr_conf of tokens whose bbox overlaps the candidate's bbox.
+
+    None if the candidate has no bbox (pasted text, CSV, or any other
+    coordinate-less source -- explicitly legal per the detection
+    contract) or if no token on the page carries both a bbox and an
+    ocr_conf to compare against (pasted-text tokens carry neither).
+    """
+    if bbox is None:
+        return None
+    matches = []
+    for t in page.get("tokens", []):
+        t_bbox = t.get("bbox")
+        t_conf = t.get("ocr_conf")
+        if t_bbox is None or t_conf is None:
+            continue
+        if _bbox_overlap(t_bbox, bbox):
+            matches.append(t_conf)
     if not matches:
         return None
     return sum(matches) / len(matches)
