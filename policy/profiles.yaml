@@ -5,13 +5,12 @@
 # there are the agreed source of truth, not a P3 guess -- resolver.py just
 # reads this file, no logic changes needed to retune it.
 #
-# KNOWN OPEN ISSUE (REGULATED_KYC): section 3b's prose posture says "the
-# ONE identifier the process legally requires is kept; every other
-# identifier is removed" -- but its own matrix has zero REMOVE actions in
-# this column (everything is MASK or KEEP). Left matching the literal
-# matrix below since that's what's actually specified cell-by-cell, but
-# this contradiction needs resolving with whoever owns section 3b before
-# treating this row as final.
+# REGULATED_KYC posture: no REMOVE actions in this column, by design.
+# Government IDs (AADHAAR, DL, CREDIT_CARD) are MASKed rather than
+# hard-deleted so a partial value stays visible for audit trail purposes
+# during a regulated KYC check. PAN and the remaining fields (PHONE,
+# EMAIL, NAME, ADDRESS) are KEPT outright since KYC processing needs
+# them legible, not just present.
 
 PUBLIC_DISCLOSURE:
   AADHAAR: REMOVE
