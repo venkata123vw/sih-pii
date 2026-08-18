@@ -1,8 +1,8 @@
 """
 app.py — P5: Interface & Integration
 
-Wired to REAL teammate modules via pipeline.py (detection, scoring,
-redaction all real now; ingestion is real code but still a stub body).
+Wired to REAL teammate modules via pipeline.py (ingestion, detection,
+scoring, and redaction are all real now — no track is a stub body).
 See pipeline.py's module docstring for the full list of integration
 fixes and known bugs found while wiring this up.
 
@@ -27,9 +27,9 @@ if "result" not in st.session_state:
     st.session_state.result = None
 
 st.title("PII Detection & Redaction")
-st.caption("SIH1668 — wired to real detection/scoring/redaction modules. "
-           "Ingestion is still a stub, so every upload shows the same "
-           "fixed sample detections until real OCR/extraction lands.")
+st.caption("SIH1668 — wired to real ingestion/detection/scoring/redaction "
+           "modules end to end. Every upload runs through real extraction "
+           "(native text or OCR) and real PII detection.")
 
 # ---------------------------------------------------------------------
 # Entry mode
