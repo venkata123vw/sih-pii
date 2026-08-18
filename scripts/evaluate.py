@@ -32,7 +32,7 @@ from pipeline import analyze
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = REPO_ROOT / "data"
-LABELS_PATH = REPO_ROOT / "ground _truth" / "labels.csv"
+LABELS_PATH = REPO_ROOT / "ground_truth" / "labels.csv"
 
 LABEL_MAP = {
     "none": None,
