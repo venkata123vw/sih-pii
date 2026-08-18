@@ -35,7 +35,7 @@ def apply_redactions(filepath: str, decisions: dict, out_path: str) -> str:
         # Validate page index
         if page_num < 0 or page_num >= len(doc):
             raise ValueError(
-                f"Invalid page_index: {page_num}"
+                f"Invalid page_num: {page_num}"
             )
 
         # Validate bounding box

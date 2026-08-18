@@ -21,12 +21,12 @@ SURVIVING_LABEL = "Aadhaar:"
 DECISIONS = {
     "detections": [
         {
-            "page_index": 0,
+            "page_num": 0,
             "bbox": [186.0, 177.0, 332.0, 207.0],
             "text": "1234 5678 9012",
         },
         {
-            "page_index": 0,
+            "page_num": 0,
             "bbox": [164.46, 228.50, 225.58, 255.98],
             "text": "Rithika",
         },
@@ -88,12 +88,12 @@ def test_empty_detections_is_a_no_op(tmp_path):
         assert detection["text"] in text
 
 
-def test_rejects_out_of_range_page_index(tmp_path):
+def test_rejects_out_of_range_page_num(tmp_path):
     out_path = str(tmp_path / "bad.pdf")
     for bad_page in (-1, 99):
-        bad = {"detections": [{"page_index": bad_page,
+        bad = {"detections": [{"page_num": bad_page,
                                "bbox": [186.0, 177.0, 332.0, 207.0]}]}
-        with pytest.raises(ValueError, match="page_index"):
+        with pytest.raises(ValueError, match="page_num"):
             apply_redactions(INPUT_PDF, bad, out_path)
 
 
@@ -101,6 +101,6 @@ def test_rejects_inverted_bbox(tmp_path):
     """x1 <= x0 or y1 <= y0 means a zero-area box that redacts nothing."""
     out_path = str(tmp_path / "bad.pdf")
     for bad_box in ([332.0, 177.0, 186.0, 207.0], [186.0, 207.0, 332.0, 177.0]):
-        bad = {"detections": [{"page_index": 0, "bbox": bad_box}]}
+        bad = {"detections": [{"page_num": 0, "bbox": bad_box}]}
         with pytest.raises(ValueError, match="bbox"):
             apply_redactions(INPUT_PDF, bad, out_path)
