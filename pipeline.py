@@ -120,6 +120,42 @@ def _add_review_defaults(scored):
         d.setdefault("user_confirmed", d["policy_action"] in ("REMOVE", "MASK"))
 
 
+def group_detections_for_review(detections: list[dict]) -> list[list[dict]]:
+    """
+    Groups detections that share the same (pii_type, value) into one
+    review unit, so the human-review UI shows one checkbox per unique
+    value instead of one row per physical occurrence on the page — a
+    real Aadhaar/PAN/etc. value legitimately appears more than once on
+    many ID documents (e.g. printed twice on the same card).
+
+    This also fixes a real crash, not just UI clutter: apply_redactions()
+    raises RedactionError if some-but-not-all occurrences of an
+    identical value get confirmed for redaction, since the confirmed
+    ones get burned but the unconfirmed duplicate leaves the same string
+    still recoverable in the output text layer — reproduced directly: a
+    2-line synthetic PDF with the same value twice, one confirmed and
+    one not, raises exactly that error. One checkbox per unique value
+    means "confirm this value" and "confirm this specific occurrence"
+    can no longer disagree.
+
+    Each returned group is a list of the ORIGINAL detection dicts (not
+    copies) — the caller must set "user_confirmed" on every dict in a
+    group together, not just one, since apply() reads it back off these
+    same objects.
+
+    Order is stable: first-seen order of each (pii_type, value) pair.
+    """
+    groups: dict[tuple[str, str], list[dict]] = {}
+    order: list[tuple[str, str]] = []
+    for d in detections:
+        key = (d["pii_type"], d["value"].strip())
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(d)
+    return [groups[key] for key in order]
+
+
 # ---------------------------------------------------------------------
 # apply() — redact ONLY user-confirmed detections.
 # ---------------------------------------------------------------------

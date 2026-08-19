@@ -11,6 +11,7 @@ Run with:  streamlit run app.py
 
 import streamlit as st
 import pipeline
+from pipeline import group_detections_for_review
 
 st.set_page_config(page_title="PII Detection & Redaction", layout="wide")
 
@@ -113,9 +114,15 @@ if run:
 if st.session_state.analysis:
     analysis = st.session_state.analysis
     detections = analysis["detections"]
+    # Groups by (pii_type, value) -- a real ID value (e.g. an Aadhaar
+    # number printed twice on one card) shouldn't show as two separate
+    # rows to confirm. Confirming a group propagates to every physical
+    # occurrence together; see pipeline.group_detections_for_review()'s
+    # docstring for the redaction crash this also prevents.
+    groups = group_detections_for_review(detections)
 
     st.divider()
-    st.subheader(f"Found {len(detections)} item(s)")
+    st.subheader(f"Found {len(groups)} item(s)")
 
     if analysis["excess_pii_alert"]:
         for item in analysis["excess_pii_alert"]:
@@ -140,20 +147,32 @@ if st.session_state.analysis:
             d["user_confirmed"] = d["policy_action"] in ("REMOVE", "MASK")
 
     confirmed = []
-    for i, d in enumerate(detections):
+    for i, members in enumerate(groups):
+        # All members share pii_type/value (the grouping key) and
+        # policy_action/necessity (looked up purely from pii_type +
+        # profile, so identical within a group) -- the highest-confidence
+        # member is the most informative one to show for the rest.
+        best = max(members, key=lambda d: d["confidence"])
         cols = st.columns([0.5, 1.2, 2, 1, 1, 1.3])
-        checked = cols[0].checkbox("", value=d["user_confirmed"], key=f"det_{i}")
-        cols[1].markdown(f"**{d['pii_type']}**")
-        cols[2].code(d["value"])
-        cols[3].markdown(f"conf {d['confidence']:.2f}")
-        cols[4].markdown(f"`{d['policy_action']}`")
-        cols[5].markdown(f"_{d['necessity'].lower()}_")
-        d["user_confirmed"] = checked
-        confirmed.append(d)
+        checked = cols[0].checkbox("", value=best["user_confirmed"], key=f"det_{i}")
+        cols[1].markdown(f"**{best['pii_type']}**")
+        label = best["value"] if len(members) == 1 else f"{best['value']}  (×{len(members)})"
+        cols[2].code(label)
+        cols[3].markdown(f"conf {best['confidence']:.2f}")
+        cols[4].markdown(f"`{best['policy_action']}`")
+        cols[5].markdown(f"_{best['necessity'].lower()}_")
+        for d in members:
+            d["user_confirmed"] = checked
+        confirmed.extend(members)
 
     with st.expander("Why these decisions? (reasons)"):
-        for d in detections:
-            st.caption(f"**{d['pii_type']}** ({d['value']}): {', '.join(d['reasons'])}")
+        for members in groups:
+            best = max(members, key=lambda d: d["confidence"])
+            occurrence_note = "" if len(members) == 1 else f" — found {len(members)} times"
+            st.caption(
+                f"**{best['pii_type']}** ({best['value']}){occurrence_note}: "
+                f"{', '.join(best['reasons'])}"
+            )
 
     st.divider()
 
