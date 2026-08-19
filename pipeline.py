@@ -50,6 +50,18 @@ the package-qualified import below is correct. redaction/test_redact.py
 and test_p4_to_p2.py use a different (`from redact import ...`) style
 because they're run standalone from within redaction/ itself — same
 dual-convention pattern scoring/'s own tests use, not a bug.
+
+RESOLVED — RedactionError on duplicate values: a real ID value (e.g. an
+Aadhaar number printed twice on one card) produces two separate
+detections at different bboxes but the same value. Confirming only one
+occurrence in the review UI used to leave the other's value still
+recoverable in the output text layer, and redact.py's own verification
+correctly caught that and raised — reproduced directly with a 2-line
+synthetic PDF. Fixed here, not in redact.py: group_detections_for_review()
+groups same (pii_type, value) detections into one review unit so app.py
+shows a single checkbox per unique value, and confirming it sets
+user_confirmed on every underlying detection dict together. Partial
+confirmation of duplicates is no longer reachable through the UI.
 """
 
 import os
