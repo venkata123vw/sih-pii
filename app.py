@@ -6,7 +6,9 @@ scoring, and redaction are all real now — no track is a stub body).
 See pipeline.py's module docstring for the full list of integration
 fixes and known bugs found while wiring this up.
 
-Run with:  streamlit run app.py
+Run with:  python -m streamlit run app.py
+(not a bare `streamlit run app.py` — see README's "Running the app"
+section for why that fails with CommandNotFoundException on Windows)
 """
 
 import streamlit as st
