@@ -14,8 +14,18 @@ locality names but not house numbers or PIN codes (spotchecked: a PIN code
 like "560001" gets misclassified as DATE by the English model, not
 captured here at all). PERSON -> NAME handled Indian names fine in manual
 spotchecks (e.g. "Ravi Kumar", "Priya Sharma"), but en_core_web_sm is an
-English-general model with no Indian-name-specific training -- state this
-limitation openly rather than overselling recall on Indian names.
+English-general model with no Indian-name-specific training, so it also
+frequently mislabels unfamiliar Indian locality names as PERSON (verified
+directly against the model: "Shahdara Mandoli", "Whitefield Marathahalli",
+and "Bangalore Karnataka" all come back PERSON, not GPE/LOC). Retraining
+or swapping the model is out of scope here; instead, _reclassify_address()
+below reclassifies a PERSON entity to ADDRESS when it sits soon after an
+explicit "Address"/"पता" label in the same text -- the same
+keyword-proximity idiom scoring/context.py already uses elsewhere in this
+project, applied to a spaCy-label problem instead of a regex one. This is
+a targeted patch, not a fix for the model's underlying blind spot: a
+locality name with no address label nearby (e.g. mentioned in free text)
+will still come through mislabeled.
 
 Confidence for every NER detection is capped at 0.5 by confidence.py
 (NER has no structural proof the way checksum-backed regex matches do).
@@ -31,6 +41,16 @@ _ENTITY_TO_PII_TYPE = {
     "LOC": "ADDRESS",
     "FAC": "ADDRESS",
 }
+
+# How far back to look for an address label before reclassifying a
+# PERSON-labeled entity to ADDRESS. Wider than context.py's VID_LABEL_GAP
+# (15 chars) on purpose: an "Address"/"पता" label governs the whole
+# following block (often several wrapped lines), not just the next word --
+# spotchecked against a real card layout, the mislabeled locality name
+# sat ~35 chars after the label. 150 covers a couple of wrapped lines
+# without reaching into unrelated fields on the same page.
+_ADDRESS_LABEL_GAP = 150
+_ADDRESS_LABELS = ("address", "पता")  # "पता" -- Hindi for "address"
 
 _nlp = None
 
@@ -84,6 +104,14 @@ def _bbox_for_span(spans: list[tuple[int, int, dict]], start: int, end: int) -> 
     ]
 
 
+def _reclassify_address(full_text: str, start_char: int) -> bool:
+    """True if an "Address"/"पता" label appears within _ADDRESS_LABEL_GAP
+    chars before this entity -- see the module docstring for why this
+    exists and its limits."""
+    preceding = full_text[max(0, start_char - _ADDRESS_LABEL_GAP):start_char].lower()
+    return any(label in preceding for label in _ADDRESS_LABELS)
+
+
 def detect(page: dict, profile: str, policy_matrix: dict) -> list[dict]:
     full_text = page.get("full_text", "")
     if not full_text.strip():
@@ -99,6 +127,10 @@ def detect(page: dict, profile: str, policy_matrix: dict) -> list[dict]:
         if pii_type is None:
             continue
 
+        reclassified = pii_type == "NAME" and _reclassify_address(full_text, ent.start_char)
+        if reclassified:
+            pii_type = "ADDRESS"
+
         # bbox=None is reported, not dropped -- consistent with how regex
         # candidates from coordinate-less sources (pasted text, CSV) are
         # already handled everywhere else in this contract. Silently
@@ -112,6 +144,8 @@ def detect(page: dict, profile: str, policy_matrix: dict) -> list[dict]:
         }
         conf = confidence.score(candidate, page_ctx)
         reasons = confidence.signal_reasons(candidate, page_ctx)
+        if reclassified:
+            reasons = reasons + ["reclassified_address_context"]
         action, necessity, resolver_reasons = resolver.resolve(
             {**candidate, "confidence": conf}, profile, policy_matrix
         )

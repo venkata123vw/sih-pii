@@ -91,4 +91,55 @@ detections = ner.detect(MIXED_PAGE, "THIRD_PARTY_SERVICE", POLICY_MATRIX)
 assert len(detections) == 1
 assert detections[0]["bbox"] == [65, 0, 150, 20]   # union of only the tokens that have one
 
+# --- Regression: en_core_web_sm mislabels unfamiliar Indian locality
+# names as PERSON (verified directly against the model, not assumed --
+# both of these come back PERSON, not GPE/LOC). Reproduces a real
+# observed false classification on a scanned Aadhaar card. A PERSON
+# entity within _ADDRESS_LABEL_GAP chars after an "Address"/"पता" label
+# gets reclassified to ADDRESS.
+ADDRESS_BLOCK_PAGE = {
+    "page_num": 0, "width": 1000, "height": 100, "tokens": [],
+    "full_text": ("Address\nH No. 12 Street No. 5 Ashok Nagar Shahdara Mandoli\n"
+                   "Saboli North East Delhi - 110093"),
+}
+detections = ner.detect(ADDRESS_BLOCK_PAGE, "THIRD_PARTY_SERVICE", POLICY_MATRIX)
+reclassified = next(d for d in detections if d["value"] == "Shahdara Mandoli")
+assert reclassified["pii_type"] == "ADDRESS"
+assert "reclassified_address_context" in reclassified["reasons"]
+
+SECOND_ADDRESS_BLOCK_PAGE = {
+    "page_num": 0, "width": 1000, "height": 100, "tokens": [],
+    "full_text": "Address\nFlat 4B Whitefield Marathahalli\nBangalore Karnataka 560001",
+}
+detections = ner.detect(SECOND_ADDRESS_BLOCK_PAGE, "THIRD_PARTY_SERVICE", POLICY_MATRIX)
+assert all(d["pii_type"] == "ADDRESS" for d in detections), detections
+assert all("reclassified_address_context" in d["reasons"] for d in detections)
+
+# --- Reclassification is directional (backward-only): an "Address"
+# label appearing AFTER a name must not retroactively reclassify it.
+NAME_BEFORE_ADDRESS_PAGE = {
+    "page_num": 0, "width": 1000, "height": 100, "tokens": [],
+    "full_text": "Name: Ravi Kumar\nDOB: 01/01/1990\nAddress\nWhitefield Bangalore",
+}
+detections = ner.detect(NAME_BEFORE_ADDRESS_PAGE, "THIRD_PARTY_SERVICE", POLICY_MATRIX)
+name = next(d for d in detections if d["value"] == "Ravi Kumar")
+assert name["pii_type"] == "NAME"
+assert "reclassified_address_context" not in name["reasons"]
+
+# --- Reclassification respects _ADDRESS_LABEL_GAP: a name that's still
+# genuinely PERSON-labeled but sits more than 150 chars after the label
+# (spotchecked at 225 chars of filler) must NOT be reclassified either.
+FAR_FROM_ADDRESS_PAGE = {
+    "page_num": 0, "width": 1000, "height": 100, "tokens": [],
+    "full_text": (
+        "Address\n"
+        + "Reference Number: 998877 Date Issued: 01-01-2024 Office Code: DL-NORTH-04. " * 3
+        + "Shahdara Mandoli"
+    ),
+}
+detections = ner.detect(FAR_FROM_ADDRESS_PAGE, "THIRD_PARTY_SERVICE", POLICY_MATRIX)
+far = next(d for d in detections if d["value"] == "Shahdara Mandoli")
+assert far["pii_type"] == "NAME"   # too far from the label to reclassify
+assert "reclassified_address_context" not in far["reasons"]
+
 print("All ner tests passed")
