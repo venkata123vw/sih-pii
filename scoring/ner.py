@@ -52,6 +52,16 @@ _ENTITY_TO_PII_TYPE = {
 _ADDRESS_LABEL_GAP = 150
 _ADDRESS_LABELS = ("address", "पता")  # "पता" -- Hindi for "address"
 
+# Common Indian ID-document field-label abbreviations that spaCy
+# sometimes classifies as PERSON when they appear as standalone
+# capitalized tokens -- verified directly: "VID" scored as a NAME
+# candidate at 0.50 confidence on a real Aadhaar card (the card's own
+# "VID" label, not a name). Exact match only (case-insensitive) against
+# the whole entity text, so a real name that merely contains one of
+# these as a substring is untouched. These are never real names, so
+# they're dropped outright rather than reclassified or down-weighted.
+_NON_NAME_LABELS = frozenset({"vid", "pan", "dob", "dl", "epic", "poi", "poa", "uid", "uidai"})
+
 _nlp = None
 
 
@@ -126,6 +136,9 @@ def detect(page: dict, profile: str, policy_matrix: dict) -> list[dict]:
         pii_type = _ENTITY_TO_PII_TYPE.get(ent.label_)
         if pii_type is None:
             continue
+
+        if pii_type == "NAME" and ent.text.strip().lower() in _NON_NAME_LABELS:
+            continue  # a document field-label abbreviation, not a real name
 
         reclassified = pii_type == "NAME" and _reclassify_address(full_text, ent.start_char)
         if reclassified:

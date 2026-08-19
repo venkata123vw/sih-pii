@@ -142,4 +142,28 @@ far = next(d for d in detections if d["value"] == "Shahdara Mandoli")
 assert far["pii_type"] == "NAME"   # too far from the label to reclassify
 assert "reclassified_address_context" not in far["reasons"]
 
+# --- Regression: spaCy sometimes classifies bare ID-document field
+# labels as PERSON. Verified directly against the model on real card
+# text: "VID" scores as PERSON here (spotchecked: 'Aadhaar 6563 2299
+# 1528 VID : 9168 7651 8239 5143' -> ('VID', 'PERSON')), and previously
+# surfaced as a NAME candidate at 0.50 confidence on a real card. These
+# are dropped outright, not reclassified or down-weighted -- they carry
+# no PII at all.
+VID_LABEL_PAGE = {
+    "page_num": 0, "width": 1000, "height": 100, "tokens": [],
+    "full_text": "Aadhaar 6563 2299 1528 VID : 9168 7651 8239 5143",
+}
+detections = ner.detect(VID_LABEL_PAGE, "THIRD_PARTY_SERVICE", POLICY_MATRIX)
+assert all(d["value"].strip().lower() != "vid" for d in detections), detections
+
+# The denylist is an exact match on the whole entity text, case
+# insensitive -- a real name that merely contains a denylisted
+# substring must NOT be dropped.
+NAME_CONTAINING_SUBSTRING_PAGE = {
+    "page_num": 0, "width": 1000, "height": 100, "tokens": [],
+    "full_text": "Contact: Vidya Poonawalla regarding the application",
+}
+detections = ner.detect(NAME_CONTAINING_SUBSTRING_PAGE, "THIRD_PARTY_SERVICE", POLICY_MATRIX)
+assert any(d["value"] == "Vidya Poonawalla" for d in detections), detections
+
 print("All ner tests passed")
