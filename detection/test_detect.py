@@ -212,6 +212,25 @@ def test_phone_formats_still_detected():
         assert "PHONE" in _types(out), words
 
 
+def test_phone_survives_ocr_garbled_mobile_label():
+    """
+    Regression: a real phone number was silently dropped (never even
+    emitted as a low-confidence candidate) on a real scanned Aadhaar
+    card because EasyOCR garbled "Mobile" into "Mbl"/"moblla" -- neither
+    contains the correctly-spelled keywords ('mobile', 'mob') as a
+    substring, so corroboration failed for the whole page and a real
+    bare 10-digit number was lost. Narrow, evidence-based fix: added the
+    two garbled forms actually observed, not general fuzzy matching.
+    """
+    for words in (
+        ["Mbl", "9494999500", "Tt"],
+        ["moblla", "nurber", "9494999500"],
+    ):
+        out = detect(_extraction(_page(words)))
+
+        assert "PHONE" in _types(out), words
+
+
 def test_voter_id_requires_context_keyword():
     """
     EPIC shape (AAA9999999) is identical to courier tracking codes —

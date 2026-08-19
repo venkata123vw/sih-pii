@@ -130,6 +130,19 @@ REGISTRY = {
                 'cell',
                 'whatsapp',
                 'landline',
+                # OCR-garbled variants of 'mobile', observed directly on
+                # real scanned Aadhaar cards: EasyOCR dropped vowels
+                # ('Mbl 9494999500 Tt', 'moblla nurber ...') badly enough
+                # that none of the correctly-spelled keywords above
+                # matched anywhere on the page, so a real phone number
+                # got silently dropped here -- never emitted as a
+                # candidate at all, not even a low-confidence one. This
+                # is a narrow, evidence-based patch (only the specific
+                # garbled forms actually observed), not general fuzzy
+                # matching -- a real phone number with a keyword garbled
+                # some other way is still exposed to the same problem.
+                'mbl',
+                'moblla',
             ),
         ),
         validator=None,
