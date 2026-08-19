@@ -71,3 +71,29 @@ def test_aadhaar_round_trip():
             random.choice('0123456789') for _ in range(10)
         )
         assert validate_aadhaar(prefix + generate_check_digit(prefix))
+
+
+def test_aadhaar_rejects_checksum_garbage():
+    """Changing the check digit must make an otherwise valid Aadhaar invalid."""
+
+    valid_numbers = []
+
+    for prefix in (
+        "49141777631",
+        "90669074391",
+        "70008063608",
+        "57783533740",
+        "88124158683",
+    ):
+        valid = prefix + generate_check_digit(prefix)
+        valid_numbers.append(valid)
+
+    for number in valid_numbers:
+        assert validate_aadhaar(number) is True
+
+        # Deliberately change the final check digit
+        bad_digit = "1" if number[-1] != "1" else "2"
+        invalid = number[:-1] + bad_digit
+
+        assert invalid != number
+        assert validate_aadhaar(invalid) is False
