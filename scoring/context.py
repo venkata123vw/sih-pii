@@ -22,17 +22,22 @@ NEGATIVE_KEYWORDS = [
 
 # Aadhaar's 16-digit VID (Virtual ID) is printed right next to the real
 # 12-digit number on every card. A sliding-window join can pick out a
-# 12-digit substring of the VID that happens to pass the Aadhaar regex
-# and, occasionally, its checksum too (a single check digit doesn't
-# reject 100% of arbitrary strings). This can't be a generic
-# NEGATIVE_KEYWORDS entry: the real Aadhaar number and the VID sit close
-# together in real card layouts, both well within the ±WINDOW_CHARS
-# radius used by negative_signal() -- a symmetric window can't tell them
-# apart and would end up penalizing the real number too. This is a
-# tighter, backward-only check instead: only true if "vid" is the label
-# directly attached to *this* match (immediately before it), not just
-# present somewhere in the general neighborhood.
+# digit substring of the VID that happens to pass another type's regex
+# -- confirmed on real cards for both AADHAAR (a 12-digit substring,
+# occasionally passing its checksum too -- a single check digit doesn't
+# reject 100% of arbitrary strings) and PHONE (a 12-digit substring
+# starting "91" reads as a self-evident +91-prefixed number). The full
+# 16-digit VID also directly satisfies CREDIT_CARD's \d{12,19} pattern
+# with no substring needed. This can't be a generic NEGATIVE_KEYWORDS
+# entry: the real number and the VID sit close together in real card
+# layouts, both well within the ±WINDOW_CHARS radius used by
+# negative_signal() -- a symmetric window can't tell them apart and
+# would end up penalizing the real number too. This is a tighter,
+# backward-only check instead: only true if "vid" is the label directly
+# attached to *this* match (immediately before it), not just present
+# somewhere in the general neighborhood.
 VID_LABEL_GAP = 15
+VID_VULNERABLE_TYPES = frozenset({"AADHAAR", "PHONE", "CREDIT_CARD"})
 
 DOC_TYPE_KEYWORDS = [
     "government of india", "uidai", "income tax department", "ministry of",
@@ -85,9 +90,10 @@ def doc_type_boost(full_text: str) -> bool:
 
 
 def vid_adjacent(full_text: str, value: str) -> bool:
-    """True if 'vid' is the label immediately preceding this AADHAAR
-    match -- see VID_LABEL_GAP above for why this has to be a narrow,
-    backward-only check rather than a NEGATIVE_KEYWORDS entry."""
+    """True if 'vid' is the label immediately preceding this match --
+    see VID_LABEL_GAP/VID_VULNERABLE_TYPES above for why this has to be
+    a narrow, backward-only check rather than a NEGATIVE_KEYWORDS
+    entry, and which candidate types are structurally exposed to it."""
     idx = _locate(full_text, value)
     if idx == -1:
         return False
@@ -133,7 +139,7 @@ def get_signals(candidate: dict, page_ctx: dict) -> dict:
     kw_match, kw = keyword_proximity(full_text, candidate["value"], candidate["pii_type"])
     neg_match, neg_kw = negative_signal(full_text, candidate["value"])
     vid_match = (
-        candidate["pii_type"] == "AADHAAR"
+        candidate["pii_type"] in VID_VULNERABLE_TYPES
         and vid_adjacent(full_text, candidate["value"])
     )
 

@@ -143,10 +143,20 @@ assert context.vid_adjacent(VID_PAGE["full_text"], VID_SUBSTRING_CANDIDATE["valu
 signals = context.get_signals(VID_SUBSTRING_CANDIDATE, VID_CTX)
 assert signals["vid_adjacent"] is True
 
-# Only applies to AADHAAR -- an unrelated pii_type sitting right after a
-# "vid" label isn't automatically suspect.
-NON_AADHAAR_CANDIDATE = {**VID_SUBSTRING_CANDIDATE, "pii_type": "CREDIT_CARD"}
-signals = context.get_signals(NON_AADHAAR_CANDIDATE, VID_CTX)
+# VID also structurally threatens PHONE (a 12-digit substring starting
+# "91" self-evidently matches the +91-prefix pattern) and CREDIT_CARD
+# (the full 16-digit VID directly satisfies \d{12,19}, no substring
+# needed) -- confirmed on a real card for PHONE specifically.
+for vulnerable_type in ("PHONE", "CREDIT_CARD"):
+    candidate = {**VID_SUBSTRING_CANDIDATE, "pii_type": vulnerable_type}
+    signals = context.get_signals(candidate, VID_CTX)
+    assert signals["vid_adjacent"] is True, vulnerable_type
+
+# Types VID can't structurally collide with (VID is pure digits; these
+# all require letters) are never flagged, even sitting right after a
+# "vid" label.
+NON_VULNERABLE_CANDIDATE = {**VID_SUBSTRING_CANDIDATE, "pii_type": "PAN"}
+signals = context.get_signals(NON_VULNERABLE_CANDIDATE, VID_CTX)
 assert signals["vid_adjacent"] is False
 
 # vid_adjacent: no match at all -> False, not a crash

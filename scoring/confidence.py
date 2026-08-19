@@ -16,7 +16,8 @@ WEIGHT_DOC_TYPE_BOOST = 0.1
 WEIGHT_NEGATIVE_SIGNAL = -0.3
 # Stronger than a generic negative signal: "vid" directly labeling this
 # specific match is close to structural proof it's the VID field, not a
-# second Aadhaar number -- see context.vid_adjacent().
+# real AADHAAR/PHONE/CREDIT_CARD value -- see context.vid_adjacent()
+# and context.VID_VULNERABLE_TYPES.
 WEIGHT_VID_ADJACENT = -0.4
 OCR_CONF_DAMPEN_THRESHOLD = 0.7
 NER_CONFIDENCE_CEILING = 0.5

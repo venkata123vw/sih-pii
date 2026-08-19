@@ -105,4 +105,31 @@ assert by_value["2341 2341 2346"]["confidence"] > by_value["8122 7978 3936"]["co
 assert "vid_adjacent" in by_value["8122 7978 3936"]["reasons"]
 assert "vid_adjacent" not in by_value["2341 2341 2346"]["reasons"]
 
+# --- Same VID problem, different type: on a second real card, the VID's
+# digits matched PHONE instead of AADHAAR (a 12-digit substring starting
+# "91" self-evidently reads as a +91-prefixed number). The original fix
+# only gated AADHAAR -- this reproduces the exact real false positive
+# that gap allowed through, and confirms PHONE is now covered too.
+# "VID" itself also got picked up by NER as a spurious NAME here (a
+# separate bug, fixed in ner.py's _NON_NAME_LABELS) -- confirmed absent.
+vid_phone_words = ["Aadhaar", "6563", "2299", "1528", "VID", ":", "9168", "7651", "8239", "5143"]
+vid_phone_page = {
+    "page_num": 0, "width": 1240, "height": 1754,
+    "tokens": [_tok(w, i) for i, w in enumerate(vid_phone_words)],
+    "full_text": "Aadhaar 6563 2299 1528 VID : 9168 7651 8239 5143",
+}
+vid_phone_extraction = {"doc_id": "vid-phone-doc", "source_type": "scanned_image", "pages": [vid_phone_page]}
+
+vid_phone_candidates = detect(vid_phone_extraction)
+assert {c["pii_type"] for c in vid_phone_candidates["candidates"]} == {"AADHAAR", "PHONE"}
+
+vid_phone_result = score(vid_phone_candidates, "THIRD_PARTY_SERVICE", vid_phone_extraction)
+aadhaar = next(d for d in vid_phone_result["detections"] if d["pii_type"] == "AADHAAR")
+phone = next(d for d in vid_phone_result["detections"] if d["pii_type"] == "PHONE")
+assert aadhaar["value"] == "6563 2299 1528"
+assert phone["value"] == "9168 7651 8239"
+assert "vid_adjacent" in phone["reasons"]
+assert aadhaar["confidence"] > phone["confidence"]
+assert not any(d["value"].strip().lower() == "vid" for d in vid_phone_result["detections"])
+
 print("All score wiring tests passed")
